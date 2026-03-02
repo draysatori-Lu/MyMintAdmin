@@ -325,10 +325,14 @@
 <body class="gradient-bg min-h-screen">
 
   <!-- Global strategy context menu — appended to body so overflow on scroll containers never clips it -->
-  <div id="strategyContextMenu" class="hidden fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg min-w-[140px] py-1">
+  <div id="strategyContextMenu" class="hidden fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg min-w-[150px] py-1">
+    <button type="button" id="ctxEditBtn" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+      <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
+    </button>
     <button type="button" id="ctxArchiveBtn" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
       <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
-      Archive
+      <span id="ctxArchiveLabel">Archive</span>
     </button>
     <button type="button" id="ctxDeleteBtn" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors">
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
@@ -591,9 +595,14 @@
                     </div>
                   </div>
 
+                  <div id="editModeBanner" class="hidden flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                    <svg class="w-4 h-4 text-amber-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span>Editing existing strategy — changes will overwrite the saved record.</span>
+                    <button type="button" id="cancelEditBtn" class="ml-auto font-semibold text-amber-700 hover:text-amber-900 transition-colors whitespace-nowrap">Cancel edit</button>
+                  </div>
                   <div class="flex items-center justify-between pt-2">
                     <p id="strategyFormMessage" class="text-xs text-slate-500"></p>
-                    <button type="submit"
+                    <button type="submit" id="strategySubmitBtn"
                       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold shadow-sm hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1 transition-colors">
                       <span>Save strategy</span>
                     </button>
@@ -751,6 +760,7 @@
     let allStrategiesData = [];
     let allStrategiesFullData = [];
     let formHoldings = [];
+    let editingStrategyId = null;
 
     const normalizeSymbol = (symbol) => {
       if (typeof symbol !== 'string') return symbol;
@@ -1360,7 +1370,9 @@
     };
 
     const _ctxMenu = document.getElementById('strategyContextMenu');
+    const _ctxEditBtn = document.getElementById('ctxEditBtn');
     const _ctxArchiveBtn = document.getElementById('ctxArchiveBtn');
+    const _ctxArchiveLabel = document.getElementById('ctxArchiveLabel');
     const _ctxDeleteBtn = document.getElementById('ctxDeleteBtn');
     let _ctxCleanup = null;
 
@@ -1369,8 +1381,11 @@
       if (_ctxCleanup) { _ctxCleanup(); _ctxCleanup = null; }
     };
 
-    const showStrategyContextMenu = (btn, strategyId, strategyName, securitiesMap) => {
+    const showStrategyContextMenu = (btn, strategy, securitiesMap) => {
       hideStrategyContextMenu();
+      const isArchived = (strategy.status || '') === 'archived';
+      _ctxArchiveLabel.textContent = isArchived ? 'Unarchive' : 'Archive';
+
       const rect = btn.getBoundingClientRect();
       const menuW = 160;
       let left = rect.right - menuW;
@@ -1379,11 +1394,18 @@
       _ctxMenu.style.left = left + 'px';
       _ctxMenu.classList.remove('hidden');
 
-      const onArchive = () => { hideStrategyContextMenu(); archiveStrategy(strategyId); };
-      const onDelete = () => { hideStrategyContextMenu(); deleteStrategy(strategyId, strategyName); };
+      const onEdit = () => { hideStrategyContextMenu(); editStrategy(strategy, securitiesMap); };
+      const onArchive = () => {
+        hideStrategyContextMenu();
+        if (isArchived) unarchiveStrategy(strategy.id);
+        else archiveStrategy(strategy.id);
+      };
+      const onDelete = () => { hideStrategyContextMenu(); deleteStrategy(strategy.id, strategy.name || 'Untitled'); };
+      _ctxEditBtn.addEventListener('click', onEdit);
       _ctxArchiveBtn.addEventListener('click', onArchive);
       _ctxDeleteBtn.addEventListener('click', onDelete);
       _ctxCleanup = () => {
+        _ctxEditBtn.removeEventListener('click', onEdit);
         _ctxArchiveBtn.removeEventListener('click', onArchive);
         _ctxDeleteBtn.removeEventListener('click', onDelete);
       };
@@ -1467,7 +1489,7 @@
       wrapper.addEventListener('click', (e) => {
         if (e.target.closest('.strategy-menu-btn')) {
           const btn = e.target.closest('.strategy-menu-btn');
-          showStrategyContextMenu(btn, strategy.id, name, securitiesMap);
+          showStrategyContextMenu(btn, strategy, securitiesMap);
           return;
         }
         if (e.target.closest('.factsheet-link')) {
@@ -1669,22 +1691,31 @@
       if (!isPublic) showFormMessage('Note: Strategy will not be visible on Mint unless "Public" is checked. Saving anyway...', 'info');
 
       payload.slug = createStrategySlug(payload.short_name || payload.name);
-      showFormMessage('Saving strategy...', 'info');
+      const isEditing = !!editingStrategyId;
+      showFormMessage(isEditing ? 'Updating strategy...' : 'Saving strategy...', 'info');
 
       const submitButton = strategyForm.querySelector('button[type="submit"]');
       const originalText = submitButton ? submitButton.innerHTML : '';
       if (submitButton) { submitButton.disabled = true; submitButton.innerHTML = '<span>Saving...</span>'; }
 
-      const { error } = await supabaseClient.from('strategies').insert([payload]);
+      let error;
+      if (isEditing) {
+        ({ error } = await supabaseClient.from('strategies').update(payload).eq('id', editingStrategyId));
+      } else {
+        ({ error } = await supabaseClient.from('strategies').insert([payload]));
+      }
 
       if (submitButton) { submitButton.disabled = false; submitButton.innerHTML = originalText || '<span>Save strategy</span>'; }
-      if (error) { console.error('Failed to create strategy', error); showFormMessage('Could not save strategy. Please try again.', 'error'); return; }
+      if (error) { console.error('Failed to save strategy', error); showFormMessage('Could not save strategy. Please try again.', 'error'); return; }
 
+      editingStrategyId = null;
       strategyForm.reset();
       formHoldings = [];
       renderFormHoldings();
       recalculate();
-      showFormMessage('Strategy saved and will appear on Mint.', 'success');
+      if (editModeBanner) editModeBanner.classList.add('hidden');
+      if (strategySubmitBtn) strategySubmitBtn.querySelector('span').textContent = 'Save strategy';
+      showFormMessage(isEditing ? 'Strategy updated successfully.' : 'Strategy saved and will appear on Mint.', 'success');
       await loadStrategies();
     };
 
@@ -2289,6 +2320,88 @@
       const { error } = await supabaseClient.from('strategies').delete().eq('id', id);
       if (error) { alert('Failed to delete strategy: ' + error.message); return; }
       await loadStrategies();
+    };
+
+    const unarchiveStrategy = async (id) => {
+      const { error } = await supabaseClient.from('strategies').update({ status: 'active', is_public: true }).eq('id', id);
+      if (error) { alert('Failed to unarchive strategy: ' + error.message); return; }
+      await loadStrategies();
+    };
+
+    const editModeBanner = document.getElementById('editModeBanner');
+    const strategySubmitBtn = document.getElementById('strategySubmitBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+
+    const cancelEdit = () => {
+      editingStrategyId = null;
+      if (strategyForm) strategyForm.reset();
+      formHoldings = [];
+      renderFormHoldings();
+      recalculate();
+      if (editModeBanner) editModeBanner.classList.add('hidden');
+      if (strategySubmitBtn) strategySubmitBtn.querySelector('span').textContent = 'Save strategy';
+      showFormMessage('');
+    };
+
+    if (cancelEditBtn) cancelEditBtn.addEventListener('click', cancelEdit);
+
+    const editStrategy = async (strategy, securitiesMap) => {
+      editingStrategyId = strategy.id;
+
+      if (strategyForm) {
+        const f = strategyForm;
+        f.querySelector('#strategyName').value = strategy.name || '';
+        f.querySelector('#strategyShortName').value = strategy.short_name || '';
+        f.querySelector('#strategyDescription').value = strategy.description || strategy.objective || '';
+        f.querySelector('#strategyRisk').value = (strategy.risk_level || '').toLowerCase();
+        f.querySelector('#strategyCurrency').value = strategy.base_currency || 'ZAR';
+        f.querySelector('#strategyIsPublic').checked = !!strategy.is_public;
+        f.querySelector('#strategyIsFeatured').checked = !!strategy.is_featured;
+
+        const sectorSelect = f.querySelector('#strategySector');
+        if (sectorSelect && strategy.sector) {
+          let opt = [...sectorSelect.options].find(o => o.value === strategy.sector);
+          if (!opt) {
+            opt = new Option(strategy.sector, strategy.sector);
+            sectorSelect.appendChild(opt);
+          }
+          sectorSelect.value = strategy.sector;
+        }
+      }
+
+      const holdings = Array.isArray(strategy.holdings) ? strategy.holdings : [];
+      formHoldings = [];
+      if (holdings.length > 0) {
+        const symbols = holdings.map(h => h.ticker || h.symbol || '').filter(Boolean);
+        let secMap = securitiesMap;
+        if (!secMap || secMap.size === 0) {
+          const { data } = await supabaseClient.from('securities').select('symbol, name, logo_url, last_price').in('symbol', symbols);
+          secMap = new Map();
+          if (data) data.forEach(s => { secMap.set(s.symbol, s); secMap.set(normalizeSymbol(s.symbol), s); });
+        }
+        holdings.forEach(h => {
+          const sym = h.ticker || h.symbol || '';
+          const sec = secMap.get(sym) || secMap.get(normalizeSymbol(sym)) || {};
+          formHoldings.push({
+            symbol: sym,
+            name: h.name || sec.name || sym,
+            shares: h.shares || h.quantity || 1,
+            last_price: h.last_price || sec.last_price || 0,
+            logo_url: sec.logo_url || null,
+            market_value: 0,
+            weight: 0
+          });
+        });
+      }
+      renderFormHoldings();
+      recalculate();
+
+      if (editModeBanner) editModeBanner.classList.remove('hidden');
+      if (strategySubmitBtn) strategySubmitBtn.querySelector('span').textContent = 'Update strategy';
+      showFormMessage('');
+
+      document.getElementById('tabStrategies')?.click();
+      setTimeout(() => strategyForm?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     };
 
     const signOutBtn = document.getElementById('signOutBtn');
