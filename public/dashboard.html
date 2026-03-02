@@ -517,7 +517,7 @@
                       placeholder="Briefly describe what this strategy aims to achieve."></textarea>
                   </div>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyRisk">Risk level</label>
                       <select id="strategyRisk" name="risk_level"
@@ -546,12 +546,6 @@
                         <button type="button" id="cancelSectorBtn"
                           class="px-3 py-2 text-xs font-semibold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
                       </div>
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyCurrency">Base currency</label>
-                      <input id="strategyCurrency" name="base_currency" type="text"
-                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-                        placeholder="ZAR" />
                     </div>
                   </div>
 
@@ -1680,7 +1674,7 @@
         risk_level: (formData.get('risk_level') || '').toString().trim() || null,
         sector: (formData.get('sector') || '').toString().trim() || null,
         min_investment: totalMarketValue > 0 ? Math.round(totalMarketValue) : null,
-        base_currency: (formData.get('base_currency') || '').toString().trim() || 'ZAR',
+        base_currency: 'ZAR',
         is_public: isPublic,
         is_featured: strategyForm.querySelector('#strategyIsFeatured')?.checked || false,
         status: 'active',
@@ -2354,7 +2348,6 @@
         f.querySelector('#strategyShortName').value = strategy.short_name || '';
         f.querySelector('#strategyDescription').value = strategy.description || strategy.objective || '';
         f.querySelector('#strategyRisk').value = (strategy.risk_level || '').toLowerCase();
-        f.querySelector('#strategyCurrency').value = strategy.base_currency || 'ZAR';
         f.querySelector('#strategyIsPublic').checked = !!strategy.is_public;
         f.querySelector('#strategyIsFeatured').checked = !!strategy.is_featured;
 
