@@ -514,9 +514,22 @@
                     </div>
                     <div>
                       <label class="block text-xs font-medium text-slate-600 mb-1" for="strategySector">Sector</label>
-                      <input id="strategySector" name="sector" type="text"
-                        class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
-                        placeholder="Multi-asset, Equity…" />
+                      <div class="flex gap-2">
+                        <select id="strategySector" name="sector"
+                          class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 bg-white">
+                          <option value="">Select sector…</option>
+                        </select>
+                        <button type="button" id="addSectorBtn"
+                          class="px-3 py-2 text-xs font-semibold text-violet-600 border border-violet-200 rounded-xl hover:bg-violet-50 transition-colors whitespace-nowrap">+ Add</button>
+                      </div>
+                      <div id="newSectorRow" class="hidden mt-2 flex gap-2">
+                        <input id="newSectorInput" type="text" placeholder="New sector name…"
+                          class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500" />
+                        <button type="button" id="confirmSectorBtn"
+                          class="px-3 py-2 text-xs font-semibold text-white bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors">Save</button>
+                        <button type="button" id="cancelSectorBtn"
+                          class="px-3 py-2 text-xs font-semibold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancel</button>
+                      </div>
                     </div>
                     <div>
                       <label class="block text-xs font-medium text-slate-600 mb-1" for="strategyCurrency">Base currency</label>
@@ -1362,7 +1375,24 @@
             </div>
           </div>
           <div class="flex flex-col items-end gap-1 flex-shrink-0">
-            <span class="px-2 py-0.5 text-[11px] rounded-full ${riskBadgeClass(risk)}">${risk}</span>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 text-[11px] rounded-full ${riskBadgeClass(risk)}">${risk}</span>
+              <div class="relative strategy-menu-wrap">
+                <button type="button" class="strategy-menu-btn w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors" data-id="${strategy.id}" data-name="${name}">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                </button>
+                <div class="strategy-menu-dropdown hidden absolute right-0 top-7 z-20 bg-white border border-slate-200 rounded-xl shadow-lg min-w-[140px] py-1">
+                  <button type="button" class="archive-strategy-btn w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors" data-id="${strategy.id}">
+                    <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+                    Archive
+                  </button>
+                  <button type="button" class="delete-strategy-btn w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 transition-colors" data-id="${strategy.id}" data-name="${name}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
             <span class="text-xs font-medium text-slate-700">${minInvestment ? formatCurrency(minInvestment, currency) : 'No min'}</span>
           </div>
         </div>
@@ -1954,6 +1984,7 @@
 
       applyStrategiesFiltersAndRender();
       updateStrategyBadges();
+      loadSectors();
     };
 
     const loadUserStats = async () => {
@@ -2052,6 +2083,94 @@
       if (!data.session) { window.location.href = '/signin.html'; return false; }
       return true;
     };
+
+    const sectorSelect = document.getElementById('strategySector');
+    const addSectorBtn = document.getElementById('addSectorBtn');
+    const newSectorRow = document.getElementById('newSectorRow');
+    const newSectorInput = document.getElementById('newSectorInput');
+    const confirmSectorBtn = document.getElementById('confirmSectorBtn');
+    const cancelSectorBtn = document.getElementById('cancelSectorBtn');
+
+    let knownSectors = ['Equities', 'Fixed Income', 'Multi-asset', 'Property', 'Cash', 'Alternatives'];
+
+    const populateSectorDropdown = (selected) => {
+      if (!sectorSelect) return;
+      sectorSelect.innerHTML = '<option value="">Select sector…</option>' +
+        knownSectors.map(s => `<option value="${s}" ${selected === s ? 'selected' : ''}>${s}</option>`).join('');
+    };
+
+    const loadSectors = async () => {
+      const { data } = await supabaseClient.from('strategies').select('sector');
+      if (data) {
+        const dbSectors = [...new Set(data.map(r => r.sector).filter(Boolean))];
+        const merged = [...new Set([...knownSectors, ...dbSectors])].sort();
+        knownSectors = merged;
+      }
+      populateSectorDropdown();
+    };
+
+    if (addSectorBtn) {
+      addSectorBtn.addEventListener('click', () => {
+        newSectorRow.classList.toggle('hidden');
+        if (!newSectorRow.classList.contains('hidden')) newSectorInput.focus();
+      });
+    }
+    if (confirmSectorBtn) {
+      confirmSectorBtn.addEventListener('click', () => {
+        const val = (newSectorInput.value || '').trim();
+        if (!val) return;
+        if (!knownSectors.includes(val)) knownSectors = [...knownSectors, val].sort();
+        populateSectorDropdown(val);
+        newSectorRow.classList.add('hidden');
+        newSectorInput.value = '';
+      });
+    }
+    if (cancelSectorBtn) {
+      cancelSectorBtn.addEventListener('click', () => {
+        newSectorRow.classList.add('hidden');
+        newSectorInput.value = '';
+      });
+    }
+
+    const archiveStrategy = async (id) => {
+      const { error } = await supabaseClient.from('strategies').update({ status: 'archived', is_public: false }).eq('id', id);
+      if (error) { alert('Failed to archive strategy: ' + error.message); return; }
+      allSecuritiesCache = null;
+      await applyStrategiesFiltersAndRender();
+    };
+
+    const deleteStrategy = async (id, name) => {
+      if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return;
+      const { error } = await supabaseClient.from('strategies').delete().eq('id', id);
+      if (error) { alert('Failed to delete strategy: ' + error.message); return; }
+      await applyStrategiesFiltersAndRender();
+    };
+
+    document.addEventListener('click', (e) => {
+      const menuBtn = e.target.closest('.strategy-menu-btn');
+      const archiveBtn = e.target.closest('.archive-strategy-btn');
+      const deleteBtn = e.target.closest('.delete-strategy-btn');
+
+      if (menuBtn) {
+        e.stopPropagation();
+        const wrap = menuBtn.closest('.strategy-menu-wrap');
+        const dropdown = wrap.querySelector('.strategy-menu-dropdown');
+        document.querySelectorAll('.strategy-menu-dropdown').forEach(d => { if (d !== dropdown) d.classList.add('hidden'); });
+        dropdown.classList.toggle('hidden');
+        return;
+      }
+      if (archiveBtn) {
+        e.stopPropagation();
+        archiveStrategy(archiveBtn.dataset.id);
+        return;
+      }
+      if (deleteBtn) {
+        e.stopPropagation();
+        deleteStrategy(deleteBtn.dataset.id, deleteBtn.dataset.name);
+        return;
+      }
+      document.querySelectorAll('.strategy-menu-dropdown').forEach(d => d.classList.add('hidden'));
+    });
 
     const signOutBtn = document.getElementById('signOutBtn');
     if (signOutBtn) {
