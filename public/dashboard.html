@@ -1405,15 +1405,39 @@
         </div>` : ''}
       `;
 
+      const menuBtn = wrapper.querySelector('.strategy-menu-btn');
+      const menuDropdown = wrapper.querySelector('.strategy-menu-dropdown');
+      if (menuBtn && menuDropdown) {
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          document.querySelectorAll('.strategy-menu-dropdown').forEach(d => { if (d !== menuDropdown) d.classList.add('hidden'); });
+          menuDropdown.classList.toggle('hidden');
+        });
+      }
+      const archiveBtn = wrapper.querySelector('.archive-strategy-btn');
+      if (archiveBtn) {
+        archiveBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuDropdown.classList.add('hidden');
+          archiveStrategy(archiveBtn.dataset.id);
+        });
+      }
+      const deleteBtn = wrapper.querySelector('.delete-strategy-btn');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          menuDropdown.classList.add('hidden');
+          deleteStrategy(deleteBtn.dataset.id, deleteBtn.dataset.name);
+        });
+      }
+
       wrapper.addEventListener('click', (e) => {
         if (e.target.closest('.factsheet-link')) {
           e.stopPropagation();
           openFactsheetInline(strategy.id);
           return;
         }
-        if (e.target.closest('.strategy-menu-wrap')) {
-          return;
-        }
+        if (e.target.closest('.strategy-menu-wrap')) return;
         openStrategyModal(strategy, securitiesMap);
       });
       return wrapper;
@@ -2149,29 +2173,7 @@
       await applyStrategiesFiltersAndRender();
     };
 
-    document.addEventListener('click', (e) => {
-      const menuBtn = e.target.closest('.strategy-menu-btn');
-      const archiveBtn = e.target.closest('.archive-strategy-btn');
-      const deleteBtn = e.target.closest('.delete-strategy-btn');
-
-      if (menuBtn) {
-        e.stopPropagation();
-        const wrap = menuBtn.closest('.strategy-menu-wrap');
-        const dropdown = wrap.querySelector('.strategy-menu-dropdown');
-        document.querySelectorAll('.strategy-menu-dropdown').forEach(d => { if (d !== dropdown) d.classList.add('hidden'); });
-        dropdown.classList.toggle('hidden');
-        return;
-      }
-      if (archiveBtn) {
-        e.stopPropagation();
-        archiveStrategy(archiveBtn.dataset.id);
-        return;
-      }
-      if (deleteBtn) {
-        e.stopPropagation();
-        deleteStrategy(deleteBtn.dataset.id, deleteBtn.dataset.name);
-        return;
-      }
+    document.addEventListener('click', () => {
       document.querySelectorAll('.strategy-menu-dropdown').forEach(d => d.classList.add('hidden'));
     });
 
