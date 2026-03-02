@@ -1280,13 +1280,14 @@
       const totalWeight = holdings.reduce((sum, h) => sum + (Number(h.weight) || 0), 0);
 
       const holdingsPreview = holdings.slice(0, 4).map(h => {
-        const sym = h.ticker || h.symbol || h;
+        const rawSym = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+        const sym = typeof rawSym === 'string' ? rawSym : String(rawSym || '');
         const sec = securitiesMap ? (securitiesMap.get(sym) || securitiesMap.get(normalizeSymbol(sym))) : null;
         const logoUrl = sec?.logo_url || null;
         return `<div class="w-6 h-6 rounded-full border border-white bg-white shadow-sm flex items-center justify-center overflow-hidden">
           ${logoUrl
             ? `<img src="${logoUrl}" alt="${sym}" class="w-full h-full object-cover" />`
-            : `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500">${(sym || '').slice(0, 2)}</div>`
+            : `<div class="w-full h-full bg-slate-100 flex items-center justify-center text-[8px] font-bold text-slate-500">${sym.slice(0, 2)}</div>`
           }
         </div>`;
       }).join('');
@@ -1348,7 +1349,8 @@
       const minInvestment = calculateMinInvestmentFromHoldings(holdings, securitiesMap || new Map());
 
       const holdingsRows = holdings.map(h => {
-        const sym = h.ticker || h.symbol || h;
+        const rawSym2 = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+        const sym = typeof rawSym2 === 'string' ? rawSym2 : String(rawSym2 || '');
         const sec = securitiesMap ? (securitiesMap.get(sym) || securitiesMap.get(normalizeSymbol(sym))) : null;
         const price = sec?.last_price ? (Number(sec.last_price) / 100) : 0;
         const shares = Number(h.shares || h.quantity || 1);
@@ -1358,7 +1360,7 @@
         return `
           <div class="flex items-center gap-3 py-2">
             <div class="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
-              ${sec?.logo_url ? `<img src="${sec.logo_url}" alt="${sym}" class="w-full h-full object-cover" />` : `<span class="text-xs font-semibold text-slate-400">${(sym || '').slice(0, 2)}</span>`}
+              ${sec?.logo_url ? `<img src="${sec.logo_url}" alt="${sym}" class="w-full h-full object-cover" />` : `<span class="text-xs font-semibold text-slate-400">${sym.slice(0, 2)}</span>`}
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-semibold text-slate-900">${sym}</p>
@@ -1454,7 +1456,7 @@
       const allSymbols = new Set();
       items.forEach(item => {
         const holdings = Array.isArray(item.holdings) ? item.holdings : [];
-        holdings.forEach(h => { const sym = h.ticker || h.symbol || h; allSymbols.add(sym); allSymbols.add(normalizeSymbol(sym)); });
+        holdings.forEach(h => { const rawS = h.ticker || h.symbol || (typeof h === 'string' ? h : ''); const sym = typeof rawS === 'string' ? rawS : String(rawS || ''); allSymbols.add(sym); allSymbols.add(normalizeSymbol(sym)); });
       });
 
       let securitiesMap = new Map();
@@ -1643,7 +1645,8 @@
       const currentCalendarYear = availableCalendarYears.length > 0 ? availableCalendarYears[availableCalendarYears.length - 1] : new Date().getFullYear().toString();
 
       const holdingsWithMetrics = holdings.map(h => {
-        const sym = h.ticker || h.symbol || h;
+        const rawSym3 = h.ticker || h.symbol || (typeof h === 'string' ? h : '');
+        const sym = typeof rawSym3 === 'string' ? rawSym3 : String(rawSym3 || '');
         const sec = securitiesMap.get(sym) || securitiesMap.get(normalizeSymbol(sym));
         const rawWeight = Number(h.weight) || 0;
         const weightNorm = totalWeight > 0 ? (rawWeight / totalWeight) * 100 : rawWeight;
