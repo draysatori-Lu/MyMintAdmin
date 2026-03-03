@@ -1358,10 +1358,8 @@
     }
 
     .history-view .timeline-header {
-      position: sticky;
-      top: 0;
+      position: static;
       background: #ffffff;
-      z-index: 2;
       padding-bottom: 10px;
       margin-bottom: 20px;
     }
@@ -1523,9 +1521,7 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      position: static;
     }
 
     .timeline-security-cell {
@@ -2041,72 +2037,65 @@
     }
 
     .sidebar {
-      width: 60px;
-      background: #ffffff;
+      width: 75px;
+      background: rgba(255, 255, 255, 0.86);
       border-right: 1px solid var(--border);
-      backdrop-filter: none;
-      padding: 16px 0;
+      backdrop-filter: blur(8px);
+      padding: 20px 0;
     }
 
     .sidebar-logo {
-      width: 34px;
-      height: 34px;
-      border-radius: 9px;
-      background: var(--primary);
-      box-shadow: 0 4px 14px rgba(108, 71, 255, 0.35);
-      margin-bottom: 28px;
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      background: transparent;
+      box-shadow: none;
+      margin-bottom: 40px;
     }
 
     .sidebar-logo svg {
-      width: 16px;
-      height: 16px;
+      width: 24px;
+      height: 24px;
       fill: #ffffff;
     }
 
     .sidebar-nav {
-      gap: 6px;
-      padding: 0 11px;
-      align-items: center;
+      gap: 15px;
+      padding: 0 15px;
+      align-items: stretch;
     }
 
     .nav-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 9px;
-      color: #a1a1ad;
-      transition: background 0.14s ease, color 0.14s ease;
+      width: 45px;
+      height: 45px;
+      border-radius: 12px;
+      color: inherit;
+      transition: all 0.3s ease;
     }
 
     .nav-icon svg {
-      width: 17px;
-      height: 17px;
-      fill: currentColor;
+      width: 22px;
+      height: 22px;
+      fill: #9ca3af;
     }
 
     .nav-icon:hover {
-      background: #f4f4f6;
-      color: #52525e;
+      background: transparent;
+      color: inherit;
+    }
+
+    .nav-icon:hover svg,
+    .nav-icon.active svg {
+      fill: #374151;
     }
 
     .nav-icon.active {
-      background: var(--primary-soft);
-      color: var(--primary);
-    }
-
-    .nav-icon.active::after {
-      content: '';
-      position: absolute;
-      left: -1px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 2px;
-      height: 18px;
-      background: var(--primary);
-      border-radius: 0 2px 2px 0;
+      background: transparent;
+      color: inherit;
     }
 
     .main-content {
-      margin-left: 60px;
+      margin-left: 75px;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -3208,7 +3197,6 @@
     const holdingsByUserMap = {};
     const securitiesByIdMap = {};
     const PACK_SECTIONS_PAGE_SIZE = 4;
-    const NEWLY_ONBOARDED_WINDOW_DAYS = 14;
 
     const getInitials = (name = '') => {
       const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -3401,23 +3389,6 @@
       return isSameLocalDay(new Date(signInTimestamp), new Date());
     };
 
-    const getProfileOnboardingTimestamp = (profile = {}) => {
-      const profileId = profile?.id;
-      const onboardingRow = onboardingMap[profileId] || {};
-      const packRow = packDetailsRowMap[profileId] || {};
-      const candidateValues = [
-        onboardingRow.updated_at,
-        onboardingRow.created_at,
-        onboardingRow.completed_at,
-        onboardingRow.kyc_completed_at,
-        packRow.updated_at,
-        packRow.created_at,
-        profile.created_at
-      ];
-
-      return candidateValues.reduce((latest, value) => Math.max(latest, toTimestamp(value)), 0);
-    };
-
     const hasProfileOnboarded = (profile = {}) => {
       const profileId = profile?.id;
       if (!profileId) return false;
@@ -3429,11 +3400,9 @@
 
     const isProfileNewlyOnboarded = (profile = {}) => {
       if (!hasProfileOnboarded(profile)) return false;
-      const onboardingTimestamp = getProfileOnboardingTimestamp(profile);
-      if (onboardingTimestamp <= 0) return false;
-      const ageMs = Date.now() - onboardingTimestamp;
-      const windowMs = NEWLY_ONBOARDED_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-      return ageMs >= 0 && ageMs <= windowMs;
+      const createdTimestamp = toTimestamp(profile?.created_at);
+      if (createdTimestamp <= 0) return false;
+      return isSameLocalDay(new Date(createdTimestamp), new Date());
     };
 
     const escapeHtml = (value) => String(value ?? '')
