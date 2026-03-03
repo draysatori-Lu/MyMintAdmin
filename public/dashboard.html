@@ -19,36 +19,10 @@
     .backdrop-blur {
       backdrop-filter: blur(12px);
     }
-<<<<<<< HEAD
-
-    .chart-gradient {
-      background: linear-gradient(to bottom right, #f8fafc, rgba(219, 234, 254, 0.3), rgba(250, 232, 255, 0.2));
-    }
-
-    .dot-pattern {
-      background-image: radial-gradient(circle at 2px 2px, rgba(148, 163, 184, 0.05) 1px, transparent 0);
-      background-size: 32px 32px;
-    }
 
     .premium-gradient {
       background: linear-gradient(to bottom right, #e2e8f0, #cbd5e1);
     }
-
-    .bar-animation {
-      animation: barGrow 0.6s ease-out;
-    }
-
-    @keyframes barGrow {
-      from {
-        height: 0;
-      }
-    }
-=======
-        
-    .premium-gradient {
-      background: linear-gradient(to bottom right, #e2e8f0, #cbd5e1);
-    }
->>>>>>> c666a180e552c16adf2a28ed1ddd0c4d0b7c30ef
 
     .sidebar {
       position: fixed;
@@ -218,21 +192,6 @@
       word-break: break-word;
     }
 
-<<<<<<< HEAD
-    .chart-scroll::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    .chart-scroll::-webkit-scrollbar-thumb {
-      background: #d1d5db;
-      border-radius: 999px;
-    }
-
-    .chart-scroll {
-      scrollbar-color: #d1d5db transparent;
-      scrollbar-width: thin;
-    }
-
     .holdings-list {
       max-height: 320px;
       overflow-y: auto;
@@ -328,8 +287,6 @@
       font-weight: 500;
       border-bottom: 2px solid transparent;
     }
-=======
->>>>>>> c666a180e552c16adf2a28ed1ddd0c4d0b7c30ef
   </style>
 </head>
 <body class="gradient-bg min-h-screen">
@@ -834,24 +791,12 @@
     };
 
     const riskBadgeClass = (risk) => {
-<<<<<<< HEAD
       switch ((risk || '').toLowerCase()) {
         case 'low': return 'bg-emerald-100 text-emerald-700';
-        case 'medium': return 'bg-amber-100 text-amber-700';
+        case 'medium':
+        case 'balanced': return 'bg-amber-100 text-amber-700';
         case 'high': return 'bg-rose-100 text-rose-700';
         default: return 'bg-slate-100 text-slate-600';
-=======
-      switch (risk) {
-        case 'low':
-          return 'bg-emerald-100 text-emerald-700';
-        case 'medium':
-        case 'balanced':
-          return 'bg-amber-100 text-amber-700';
-        case 'high':
-          return 'bg-rose-100 text-rose-700';
-        default:
-          return 'bg-slate-100 text-slate-600';
->>>>>>> c666a180e552c16adf2a28ed1ddd0c4d0b7c30ef
       }
     };
 
@@ -957,10 +902,7 @@
         container.appendChild(empty);
         return;
       }
-<<<<<<< HEAD
       items.forEach(item => container.appendChild(renderOverviewStrategyItem(item)));
-=======
-      items.forEach(item => container.appendChild(renderStrategyItem(item)));
     };
 
     const renderSelectedAssetsPills = () => {
@@ -1042,63 +984,6 @@
       });
     };
 
-    const applyStrategiesFiltersAndRender = () => {
-      if (!strategiesList) return;
-      let items = [...allStrategiesFullData];
-
-      const searchText = (strategySearch?.value || '').trim().toLowerCase();
-      if (searchText) {
-        items = items.filter((item) => {
-          const text = [
-            item.name,
-            item.short_name,
-            item.description,
-            item.objective,
-            item.sector
-          ].filter(Boolean).join(' ').toLowerCase();
-          return text.includes(searchText);
-        });
-      }
-
-      const riskValue = filterRisk?.value || '';
-      if (riskValue) {
-        items = items.filter((item) => (item.risk_level || '').toLowerCase() === riskValue);
-      }
-
-      const visValue = filterVisibility?.value || '';
-      if (visValue === 'public') {
-        items = items.filter((item) => item.is_public);
-      } else if (visValue === 'featured') {
-        items = items.filter((item) => item.is_featured);
-      }
-
-      const sortValue = sortBy?.value || 'recent';
-      if (sortValue === 'name') {
-        items.sort((a, b) => (a.short_name || a.name || '').localeCompare(b.short_name || b.name || ''));
-      } else if (sortValue === 'min_investment_desc') {
-        items.sort((a, b) => (Number(b.min_investment) || 0) - (Number(a.min_investment) || 0));
-      } else if (sortValue === 'min_investment_asc') {
-        items.sort((a, b) => (Number(a.min_investment) || 0) - (Number(b.min_investment) || 0));
-      } else {
-        items.sort((a, b) => {
-          const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return bCreated - aCreated;
-        });
-      }
-
-      strategiesList.innerHTML = '';
-      if (!items.length) {
-        const empty = document.createElement('div');
-        empty.className = 'text-sm text-slate-500';
-        empty.textContent = 'No strategies match your filters.';
-        strategiesList.appendChild(empty);
-        return;
-      }
-
-      items.forEach((item) => strategiesList.appendChild(renderStrategyItem(item)));
-    };
-
     const renderTop5Strategies = () => {
       if (!topStrategiesList) return;
       const scored = [...allStrategiesFullData].map((item) => ({
@@ -1145,143 +1030,6 @@
       if (top5Badge) {
         top5Badge.textContent = `${top5.length} strategies`;
       }
-    };
-
-    const buildStrategyChart = (strategies) => {
-      if (!strategyChart) return;
-      if (typeof echarts === 'undefined') {
-        strategyChart.innerHTML = '<div class="text-sm text-slate-500 h-full flex items-center justify-center">Chart library unavailable.</div>';
-        return;
-      }
-
-      if (strategyChart.__strategyChartResizeObserver) {
-        strategyChart.__strategyChartResizeObserver.disconnect();
-        strategyChart.__strategyChartResizeObserver = null;
-      }
-
-      const existing = echarts.getInstanceByDom(strategyChart);
-      if (existing) {
-        existing.dispose();
-      }
-
-      const chart = echarts.init(strategyChart, null, { renderer: 'canvas' });
-
-      const items = (strategies || []).map((strategy, index) => ({
-        name: strategy.short_name || strategy.name || `Strategy ${index + 1}`,
-        value: Math.max(Number(strategy.min_investment) || 0, 0),
-        currency: strategy.base_currency || 'ZAR',
-        risk: (strategy.risk_level || 'unspecified').toLowerCase(),
-        sector: strategy.sector || null,
-        isFeatured: !!strategy.is_featured
-      }));
-
-      const riskColor = (risk) => ({
-        low: '#10b981',
-        medium: '#f59e0b',
-        balanced: '#f59e0b',
-        high: '#f43f5e'
-      }[risk] || '#94a3b8');
-
-      const formatCur = (value, currency = 'ZAR') => {
-        if (!value) return 'No minimum';
-        try {
-          return new Intl.NumberFormat('en-ZA', {
-            style: 'currency',
-            currency,
-            maximumFractionDigits: 0
-          }).format(value);
-        } catch (error) {
-          return `${value.toLocaleString()} ${currency}`;
-        }
-      };
-
-      const option = {
-        grid: { left: 20, right: 20, top: 20, bottom: 48, containLabel: true },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(148,163,184,0.08)' } },
-          backgroundColor: '#1e293b',
-          borderColor: '#334155',
-          borderWidth: 1,
-          borderRadius: 12,
-          padding: [10, 14],
-          textStyle: { color: '#f1f5f9', fontSize: 12 },
-          formatter(params) {
-            const point = params?.[0];
-            if (!point) return '';
-            const details = items[point.dataIndex];
-            if (!details) return '';
-            return [
-              `<b style="font-size:13px">${details.name}</b>`,
-              `<span style="color:#94a3b8">Min. investment:</span> <b style="color:#a5f3fc">${formatCur(details.value, details.currency)}</b>`,
-              details.sector ? `<span style="color:#94a3b8">Sector:</span> ${details.sector}` : '',
-              `<span style="color:#94a3b8">Risk:</span> <span style="color:${riskColor(details.risk)}">${details.risk}</span>`,
-              details.isFeatured ? '<span style="background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:999px;font-size:11px">★ Featured</span>' : ''
-            ].filter(Boolean).join('<br/>');
-          }
-        },
-        xAxis: {
-          type: 'category',
-          data: items.map(item => item.name),
-          axisLine: { show: false },
-          axisTick: { show: false },
-          axisLabel: {
-            color: '#94a3b8',
-            fontSize: 11,
-            interval: 0,
-            rotate: items.length > 6 ? 30 : 0,
-            formatter: (value) => (value.length > 10 ? `${value.slice(0, 9)}…` : value)
-          }
-        },
-        yAxis: {
-          type: 'value',
-          splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-          axisLabel: {
-            color: '#94a3b8',
-            fontSize: 11,
-            formatter: (value) => (value >= 1000000
-              ? `${value / 1000000}M`
-              : value >= 5000
-                ? `${value / 1000}k`
-                : value.toString())
-          }
-        },
-        series: [{
-          type: 'bar',
-          data: items.map(item => ({
-            value: item.value || 1,
-            itemStyle: {
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: riskColor(item.risk) },
-                { offset: 1, color: `${riskColor(item.risk)}33` }
-              ]),
-              borderRadius: [8, 8, 0, 0]
-            },
-            emphasis: {
-              itemStyle: {
-                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                  { offset: 0, color: riskColor(item.risk) },
-                  { offset: 1, color: `${riskColor(item.risk)}66` }
-                ]),
-                shadowBlur: 12,
-                shadowColor: `${riskColor(item.risk)}55`
-              }
-            }
-          })),
-          barMaxWidth: 52,
-          animationDuration: 700,
-          animationEasing: 'cubicOut'
-        }]
-      };
-
-      chart.setOption(option);
-
-      const resizeObserver = new ResizeObserver(() => {
-        chart.resize();
-      });
-      resizeObserver.observe(strategyChart);
-      strategyChart.__strategyChartResizeObserver = resizeObserver;
->>>>>>> c666a180e552c16adf2a28ed1ddd0c4d0b7c30ef
     };
 
     const renderHoldingCard = (security) => {
