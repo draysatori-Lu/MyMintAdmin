@@ -5736,7 +5736,23 @@
         mandateActionBtn.textContent = 'Preparing PDF...';
 
         try {
-          const report = buildMandatePdfReport(profile, onboardingRow);
+          const { data: sessionData } = await supabaseClient.auth.getSession();
+          const accessToken = sessionData?.session?.access_token || '';
+          let mandateDataFromServer = null;
+          try {
+            const mdRes = await fetch(`/api/mandate-data?profileId=${encodeURIComponent(profileId)}`, {
+              headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const mdJson = await mdRes.json();
+            mandateDataFromServer = mdJson?.mandate_data || null;
+          } catch (e) {
+            console.warn('Could not fetch mandate data from server:', e);
+          }
+          const enrichedOnboardingRow = {
+            ...onboardingRow,
+            sumsub_raw: mandateDataFromServer ? { mandate_data: mandateDataFromServer } : (onboardingRow?.sumsub_raw || {})
+          };
+          const report = buildMandatePdfReport(profile, enrichedOnboardingRow);
           if (!report) throw new Error('Could not build mandate PDF.');
 
           if (mandateViewBtn) {

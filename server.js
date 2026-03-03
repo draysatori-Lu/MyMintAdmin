@@ -357,6 +357,35 @@ const getSumsubAuthHeaders = (method, pathWithQuery) => {
 };
 
 const server = http.createServer((req, res) => {
+  if (req.url.startsWith('/api/mandate-data') && req.method === 'GET') {
+    const token = parseBearerToken(req.headers.authorization);
+    if (!token) {
+      sendJson(res, 401, { error: 'Missing Authorization bearer token' });
+      return;
+    }
+    (async () => {
+      try {
+        await fetchSupabaseJson('/auth/v1/user', token, false);
+        const profileId = new URL(req.url, 'http://localhost').searchParams.get('profileId');
+        if (!profileId) {
+          sendJson(res, 400, { error: 'Missing profileId parameter' });
+          return;
+        }
+        const rows = await fetchSupabaseJson(
+          `/rest/v1/user_onboarding?select=sumsub_raw&user_id=eq.${encodeURIComponent(profileId)}&limit=1`,
+          token
+        );
+        const row = Array.isArray(rows) ? rows[0] : null;
+        const raw = row?.sumsub_raw;
+        const mandateData = (raw && typeof raw === 'object' ? raw : {}).mandate_data || null;
+        sendJson(res, 200, { mandate_data: mandateData });
+      } catch (err) {
+        sendJson(res, 500, { error: err.message || 'Failed to fetch mandate data' });
+      }
+    })();
+    return;
+  }
+
   if (req.url.startsWith('/api/orderbook/send-csv') && req.method === 'POST') {
     const token = parseBearerToken(req.headers.authorization);
     if (!token) {
