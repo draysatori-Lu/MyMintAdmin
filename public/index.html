@@ -5103,8 +5103,8 @@
       };
 
       /* ---------- checkbox state determination ---------- */
-      const rawSource = getMandateDataSource(profile?.id, onboardingRow);
-      const mandateData    = (rawSource && rawSource.mandate_data) ? rawSource.mandate_data : {};
+      const sumsubRaw  = parseJsonSafe(onboardingRow?.sumsub_raw) || {};
+      const mandateData    = sumsubRaw.mandate_data || {};
       const checkedBoxes   = mandateData.checkedBoxes || {};
       const discretionType = mandateData.discretionType || 'full';
       const isBoxChecked   = (key) => checkedBoxes[key] === true;
