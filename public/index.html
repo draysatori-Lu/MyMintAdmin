@@ -848,6 +848,36 @@
       background: #f9fafb;
     }
 
+    .mandate-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mandate-action-btn {
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 7px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      color: #374151;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .mandate-action-btn:hover {
+      background: #f9fafb;
+      border-color: #d1d5db;
+    }
+
+    .mandate-action-btn:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
     .detail-row {
       display: flex;
       align-items: flex-start;
@@ -2592,7 +2622,8 @@
     .pack-modal-copy,
     .pack-view-btn,
     .pack-sync-btn,
-    .save-phone-btn {
+    .save-phone-btn,
+    .mandate-action-btn {
       height: 30px;
       border-radius: 7px;
       font-size: 12px;
@@ -2842,6 +2873,16 @@
                 <div class="detail-row">
                   <div class="detail-label">Phone number</div>
                   <div class="detail-value" data-phone>Not added</div>
+                </div>
+
+                <div class="detail-row" data-mandate-actions style="display: none;">
+                  <div class="detail-label">Mandate</div>
+                  <div class="detail-value">
+                    <div class="mandate-actions">
+                      <button class="mandate-action-btn" type="button" data-mandate-view>View</button>
+                      <button class="mandate-action-btn" type="button" data-mandate-download>Download</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3189,6 +3230,8 @@
       kyc: 'all',
       bank: 'all'
     };
+    const MANDATE_TEMPLATE_PATH = '/mandate-template.html';
+    let mandateTemplateHtmlCache = null;
     let allProfiles = [];
     let allKycMap = {};
     const onboardingMap = {};
@@ -4443,6 +4486,12 @@
         renderHistoryForItem(clone, profile, kycEntry, onboardingMap[profile.id], packDetailsRowMap[profile.id]);
         renderHoldingsForItem(clone, profile.id);
 
+        const mandateActionsRow = clone.querySelector('[data-mandate-actions]');
+        if (mandateActionsRow) {
+          const hasOnboardingRow = Boolean(onboardingMap[profile.id]);
+          mandateActionsRow.style.display = hasOnboardingRow ? '' : 'none';
+        }
+
         if (packJsonMap[profile.id]) {
           const packBtn = clone.querySelector('[data-pack-details]');
           if (packBtn) packBtn.disabled = false;
@@ -4818,6 +4867,307 @@
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '');
 
+    const parseJsonSafe = (value) => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'object') return value;
+      if (typeof value !== 'string') return null;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return null;
+      }
+    };
+
+    const getMandateTemplateHtml = async () => {
+      if (mandateTemplateHtmlCache) return mandateTemplateHtmlCache;
+      const response = await fetch(MANDATE_TEMPLATE_PATH, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`Mandate template load failed (${response.status})`);
+      }
+      mandateTemplateHtmlCache = await response.text();
+      return mandateTemplateHtmlCache;
+    };
+
+    const getMandateDataSource = (profileId, onboardingRow = {}) => {
+      const fromOnboarding = parseJsonSafe(onboardingRow?.sumsub_raw);
+      if (fromOnboarding) return fromOnboarding;
+      const fromPackRow = parseJsonSafe(packDetailsRowMap[profileId]?.pack_details);
+      if (fromPackRow) return fromPackRow;
+      return parseJsonSafe(packJsonMap[profileId]) || {};
+    };
+
+    const getMandatePrefillData = (profile = {}, onboardingRow = {}) => {
+      const source = getMandateDataSource(profile?.id, onboardingRow);
+      const fullNameFromSource = String(pickPackValue(source, ['fullName', 'info.fullName', 'full_name']) || '').trim();
+      const sourceFirstName = String(pickPackValue(source, ['firstName', 'first_name', 'fixedInfo.firstName', 'info.firstName', 'name.first']) || '').trim();
+      const sourceLastName = String(pickPackValue(source, ['lastName', 'last_name', 'fixedInfo.lastName', 'info.lastName', 'name.last']) || '').trim();
+      const profileFirstName = String(profile?.first_name || '').trim();
+      const profileLastName = String(profile?.last_name || '').trim();
+      const firstName = sourceFirstName || profileFirstName || fullNameFromSource.split(/\s+/).filter(Boolean).slice(0, -1).join(' ');
+      const lastName = sourceLastName || profileLastName || fullNameFromSource.split(/\s+/).filter(Boolean).slice(-1).join(' ');
+
+      const identityNumber = String(pickPackValue(source, [
+        'idDocs.0.number',
+        'idDocs.0.idNumber',
+        'fixedInfo.idNumber',
+        'fixedInfo.nationality.idNumber',
+        'idNumber',
+        'passportNumber',
+        'document.number'
+      ]) || '').trim();
+
+      const email = String(
+        pickPackValue(source, ['email', 'emails.0', 'info.email', 'fixedInfo.email', 'contacts.email'])
+        || profile?.email
+        || ''
+      ).trim();
+
+      const phone = String(
+        pickPackValue(source, ['phone', 'phoneNumber', 'phone_number', 'mobile', 'info.phone', 'fixedInfo.phone'])
+        || profile?.phone_number
+        || ''
+      ).trim();
+
+      const residentialAddress = String(
+        pickPackValue(source, [
+          'address.formattedAddress',
+          'addresses.residential.formatted',
+          'addresses.0.formattedAddress',
+          'fixedInfo.address',
+          'info.address'
+        ])
+        || profile?.address
+        || ''
+      ).trim();
+
+      const postalAddress = String(
+        pickPackValue(source, [
+          'addresses.postal.formatted',
+          'postalAddress',
+          'mailingAddress',
+          'address.formattedAddress'
+        ])
+        || profile?.address
+        || ''
+      ).trim();
+
+      const postalCode = String(pickPackValue(source, ['address.postCode', 'address.postalCode', 'addresses.postal.postCode']) || '').trim();
+      const jsonCorpus = JSON.stringify({ source, onboardingRow }).toLowerCase();
+      const initials = ((firstName[0] || '') + (lastName[0] || '')).toUpperCase() || 'NA';
+
+      const phoneDigits = phone.replace(/\D/g, '');
+      let countryCode = '';
+      let areaOrCellCode = '';
+      let phoneBody = '';
+      if (phoneDigits.length >= 9) {
+        if (phoneDigits.startsWith('27')) {
+          countryCode = '27';
+          areaOrCellCode = phoneDigits.slice(2, 4);
+          phoneBody = phoneDigits.slice(4);
+        } else {
+          countryCode = phoneDigits.slice(0, 2);
+          areaOrCellCode = phoneDigits.slice(2, 4);
+          phoneBody = phoneDigits.slice(4);
+        }
+      }
+
+      return {
+        firstName,
+        lastName,
+        identityNumber,
+        email,
+        phone,
+        postalAddress,
+        postalCode,
+        residentialAddress,
+        initials,
+        countryCode,
+        areaOrCellCode,
+        phoneBody,
+        jsonCorpus
+      };
+    };
+
+    const applyMandateCheckboxes = (doc, data) => {
+      const setChecked = (id, checked) => {
+        const input = doc.getElementById(id);
+        if (input) input.checked = Boolean(checked);
+      };
+
+      const text = data.jsonCorpus;
+      const localMentioned = text.includes('local');
+      const offshoreMentioned = text.includes('offshore') || text.includes('off-shore');
+      const bothJurisdictions = localMentioned && offshoreMentioned;
+
+      setChecked('full-local', !bothJurisdictions && localMentioned);
+      setChecked('full-offshore', !bothJurisdictions && offshoreMentioned);
+      setChecked('full-both', bothJurisdictions || (!localMentioned && !offshoreMentioned));
+
+      setChecked('lim-local', !bothJurisdictions && localMentioned);
+      setChecked('lim-offshore', !bothJurisdictions && offshoreMentioned);
+      setChecked('lim-both', bothJurisdictions || (!localMentioned && !offshoreMentioned));
+
+      const growthMentioned = text.includes('growth');
+      const incomeMentioned = text.includes('income');
+      const useGrowth = growthMentioned || !incomeMentioned;
+      const useIncome = incomeMentioned;
+
+      ['full-lt-growth', 'full-mt-growth', 'full-st-growth', 'lim-lt-growth', 'lim-mt-growth', 'lim-st-growth', 'add-lt-growth', 'add-mt-growth', 'add-st-growth']
+        .forEach(id => setChecked(id, useGrowth));
+      ['full-lt-income', 'full-mt-income', 'full-st-income', 'lim-lt-income', 'lim-mt-income', 'lim-st-income', 'add-lt-income', 'add-mt-income', 'add-st-income']
+        .forEach(id => setChecked(id, useIncome));
+
+      const riskMap = [
+        { id: 'vcons', keys: ['very conservative'] },
+        { id: 'cons', keys: ['conservative'] },
+        { id: 'mod', keys: ['moderate', 'balanced'] },
+        { id: 'agg', keys: ['aggressive'] },
+        { id: 'vagg', keys: ['very aggressive'] }
+      ];
+      const matchedRisk = riskMap.find((entry) => entry.keys.some(key => text.includes(key)))?.id || 'mod';
+
+      ['full', 'lim', 'add'].forEach((prefix) => {
+        ['vcons', 'cons', 'mod', 'agg', 'vagg'].forEach((risk) => {
+          setChecked(`${prefix}-risk-${risk}`, risk === matchedRisk);
+        });
+      });
+
+      const instruction = text.includes('prior consent') || text.includes('on my instruction');
+      const advisor = text.includes('advisor') || text.includes('adviser');
+      setChecked('lim-instruction', instruction);
+      setChecked('lim-advisor', !instruction && advisor);
+      setChecked('lim-advice', !instruction && !advisor);
+
+      const payout = text.includes('paid out') || text.includes('payout') || text.includes('withdraw');
+      setChecked('lim-payout', payout);
+      setChecked('lim-reinvest', !payout);
+    };
+
+    const buildFilledMandateHtml = async (profile, onboardingRow = {}) => {
+      const templateHtml = await getMandateTemplateHtml();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(templateHtml, 'text/html');
+      const prefill = getMandatePrefillData(profile, onboardingRow);
+
+      const clientTable = doc.querySelectorAll('table.info-table')[1];
+      const inputs = clientTable ? Array.from(clientTable.querySelectorAll('input[type="text"]')) : [];
+      const setAt = (index, value) => {
+        if (!inputs[index]) return;
+        inputs[index].value = String(value || '').trim();
+      };
+
+      setAt(0, prefill.lastName);
+      setAt(1, prefill.firstName);
+      setAt(2, prefill.identityNumber);
+      setAt(3, '-');
+      setAt(4, prefill.postalAddress);
+      setAt(5, prefill.postalCode);
+      setAt(6, prefill.residentialAddress);
+      setAt(7, prefill.residentialAddress);
+      setAt(8, prefill.countryCode || '27');
+      setAt(9, prefill.areaOrCellCode || '-');
+      setAt(10, prefill.phoneBody || '-');
+      setAt(11, prefill.countryCode || '27');
+      setAt(12, prefill.areaOrCellCode || '-');
+      setAt(13, prefill.phoneBody || '-');
+      setAt(14, prefill.countryCode || '27');
+      setAt(15, '-');
+      setAt(16, '-');
+      setAt(17, prefill.countryCode || '27');
+      setAt(18, '-');
+      setAt(19, '-');
+      setAt(20, prefill.countryCode || '27');
+      setAt(21, prefill.areaOrCellCode || '-');
+      setAt(22, prefill.phoneBody || '-');
+      setAt(23, prefill.email);
+      setAt(24, prefill.email);
+
+      applyMandateCheckboxes(doc, prefill);
+
+      doc.querySelectorAll('input[type="text"]').forEach((input) => {
+        if (input.classList.contains('initials-input')) return;
+        if (!String(input.value || '').trim()) input.value = '-';
+      });
+
+      doc.querySelectorAll('.initials-input').forEach((input) => {
+        input.value = prefill.initials;
+      });
+
+      const masterInitials = doc.getElementById('master-initials');
+      if (masterInitials) masterInitials.value = prefill.initials;
+
+      return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
+    };
+
+    const viewMandateHtml = (htmlText) => {
+      const printWindow = window.open('', '_blank', 'noopener');
+      if (!printWindow) return false;
+      printWindow.document.open();
+      printWindow.document.write(htmlText);
+      printWindow.document.close();
+      return true;
+    };
+
+    const buildMandatePdfBlob = async (htmlText) => {
+      const JsPdf = window.jspdf?.jsPDF;
+      if (!JsPdf) {
+        throw new Error('jsPDF is not available.');
+      }
+
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(htmlText, 'text/html');
+      const sandbox = document.createElement('div');
+      sandbox.style.position = 'fixed';
+      sandbox.style.left = '-100000px';
+      sandbox.style.top = '0';
+      sandbox.style.width = '210mm';
+      sandbox.style.background = '#ffffff';
+      sandbox.setAttribute('aria-hidden', 'true');
+
+      const styleEls = Array.from(parsed.head.querySelectorAll('style, link[rel="stylesheet"]'));
+      styleEls.forEach((node) => {
+        sandbox.appendChild(node.cloneNode(true));
+      });
+
+      const bodyWrapper = document.createElement('div');
+      bodyWrapper.innerHTML = parsed.body.innerHTML;
+      sandbox.appendChild(bodyWrapper);
+      document.body.appendChild(sandbox);
+
+      try {
+        const doc = new JsPdf({ orientation: 'p', unit: 'pt', format: 'a4' });
+        await new Promise((resolve) => {
+          doc.html(sandbox, {
+            x: 0,
+            y: 0,
+            margin: [10, 10, 10, 10],
+            autoPaging: 'text',
+            html2canvas: {
+              scale: 0.55,
+              useCORS: true,
+              backgroundColor: '#ffffff'
+            },
+            callback: () => resolve()
+          });
+        });
+        return doc.output('blob');
+      } finally {
+        sandbox.remove();
+      }
+    };
+
+    const openPdfBlobInNewTab = (blob) => {
+      if (!blob) return false;
+      const url = URL.createObjectURL(blob);
+      const openedWindow = window.open(url, '_blank', 'noopener');
+      if (!openedWindow) {
+        URL.revokeObjectURL(url);
+        return false;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60 * 1000);
+      return true;
+    };
+
     const resolveMetadataItems = (metadata) => {
       const items = Array.isArray(metadata)
         ? metadata
@@ -4989,7 +5339,7 @@
     };
 
 
-    document.addEventListener('click', (event) => {
+    document.addEventListener('click', async (event) => {
       const packDownloadBtn = event.target.closest('[data-pack-download]');
       if (packDownloadBtn) {
         const container = packDownloadBtn.closest('.tabs-container');
@@ -5205,6 +5555,44 @@
         const item = phoneAdd.closest('.simple-item');
         if (!item) return;
         openPhoneModal(item);
+      }
+
+      const mandateViewBtn = event.target.closest('[data-mandate-view]');
+      const mandateDownloadBtn = event.target.closest('[data-mandate-download]');
+      const mandateActionBtn = mandateViewBtn || mandateDownloadBtn;
+      if (mandateActionBtn) {
+        const item = mandateActionBtn.closest('.simple-item');
+        const profileId = item?.dataset?.profileId;
+        if (!item || !profileId) return;
+
+        const profile = allProfiles.find((row) => String(row.id) === String(profileId));
+        const onboardingRow = onboardingMap[profileId];
+        if (!profile || !onboardingRow) return;
+
+        const originalLabel = mandateActionBtn.textContent;
+        mandateActionBtn.disabled = true;
+        mandateActionBtn.textContent = 'Preparing PDF...';
+
+        try {
+          const mandateHtml = await buildFilledMandateHtml(profile, onboardingRow);
+          const safeBase = sanitizeFilename([profile.first_name, profile.last_name].filter(Boolean).join('_') || profileId || 'client') || 'client';
+          const pdfFilename = `mandate-${safeBase}.pdf`;
+          const pdfBlob = await buildMandatePdfBlob(mandateHtml);
+
+          if (mandateViewBtn) {
+            const opened = openPdfBlobInNewTab(pdfBlob);
+            if (!opened) {
+              downloadBlobFile(pdfBlob, pdfFilename);
+            }
+          } else {
+            downloadBlobFile(pdfBlob, pdfFilename);
+          }
+        } catch (error) {
+          console.error('Mandate generation failed:', error);
+        } finally {
+          mandateActionBtn.disabled = false;
+          mandateActionBtn.textContent = originalLabel;
+        }
       }
 
       const packDetailsBtn = event.target.closest('[data-pack-details]');
