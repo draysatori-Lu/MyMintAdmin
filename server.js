@@ -436,7 +436,7 @@ const server = http.createServer((req, res) => {
         const securitiesRows = securityIds.length ? await loadSecuritiesByIds(securityIds, token) : [];
         const profileRows = userIds.length
           ? await fetchSupabaseJson(
-            `/rest/v1/profiles?select=id,first_name,last_name,email,phone_number&id=in.(${buildInFilter(userIds)})`,
+            `/rest/v1/profiles?select=id,first_name,last_name,email,phone_number,mint_number&id=in.(${buildInFilter(userIds)})`,
             token
           )
           : [];
