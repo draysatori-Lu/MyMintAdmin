@@ -4895,6 +4895,8 @@
       const lastName = sourceLastName || profileLastName || fullNameFromSource.split(/\s+/).filter(Boolean).slice(-1).join(' ');
 
       const identityNumber = String(pickPackValue(source, [
+        'info.idDocs.0.number',
+        'info.idDocs.0.idNumber',
         'fixedInfo.idDocs.0.number',
         'fixedInfo.idDocs.0.idNumber',
         'info.idNumber',
@@ -4923,6 +4925,10 @@
 
       const residentialAddress = String(
         pickPackValue(source, [
+          'info.addresses.0.streetEn',
+          'info.addresses.0.street',
+          'info.idDocs.1.address.streetEn',
+          'info.idDocs.1.address.street',
           'fixedInfo.address',
           'fixedInfo.fullAddress',
           'fixedInfo.residentialAddress',
@@ -4936,10 +4942,11 @@
           'addresses.residential.fullAddress',
           'addresses.residential.addressLine',
           'addresses.residential.street',
+          'addresses.0.streetEn',
+          'addresses.0.street',
           'addresses.0.fullAddress',
           'addresses.0.formattedAddress',
-          'addresses.0.addressLine',
-          'addresses.0.street'
+          'addresses.0.addressLine'
         ])
         || profile?.address
         || ''
@@ -4947,6 +4954,9 @@
 
       const postalAddress = String(
         pickPackValue(source, [
+          'info.addresses.0.formattedAddress',
+          'info.idDocs.1.address.formattedAddress',
+          'info.addresses.0.fullAddress',
           'fixedInfo.postalAddress',
           'fixedInfo.address',
           'info.postalAddress',
@@ -4967,6 +4977,9 @@
       ).trim();
 
       const postalCode = String(pickPackValue(source, [
+        'info.addresses.0.postCode',
+        'info.idDocs.1.address.postCode',
+        'info.addresses.0.postalCode',
         'fixedInfo.postCode',
         'fixedInfo.postalCode',
         'info.postCode',
