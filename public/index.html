@@ -541,6 +541,33 @@
       cursor: progress;
     }
 
+    .profiles-loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      gap: 14px;
+    }
+
+    .profiles-loader-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e5e7eb;
+      border-top-color: var(--primary, #7c3aed);
+      border-radius: 50%;
+      animation: profilesSpin 0.7s linear infinite;
+    }
+
+    .profiles-loader-text {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    @keyframes profilesSpin {
+      to { transform: rotate(360deg); }
+    }
+
     .ellipsis-btn.is-loading svg {
       fill: var(--primary);
       animation: chevronPulse 1s ease-in-out infinite;
@@ -4725,6 +4752,10 @@
     };
 
     const loadProfiles = async () => {
+      if (profilesList) {
+        profilesList.innerHTML = '<div class="profiles-loader"><div class="profiles-loader-spinner"></div><div class="profiles-loader-text">Loading users…</div></div>';
+      }
+
       Object.keys(onboardingMap).forEach(key => delete onboardingMap[key]);
       Object.keys(packDetailsRowMap).forEach(key => delete packDetailsRowMap[key]);
       Object.keys(allocationsByUserMap).forEach(key => delete allocationsByUserMap[key]);
@@ -4746,13 +4777,15 @@
       let kycMap = {};
 
       if (userIds.length) {
-        const { data: onboarding, error: onboardingError } = await supabaseClient
-          .from('user_onboarding')
-          .select('*')
-          .in('user_id', userIds);
+        const [onboardingRes, packRes, allocationsRes, holdingsRes] = await Promise.all([
+          supabaseClient.from('user_onboarding').select('*').in('user_id', userIds),
+          supabaseClient.from('user_onboarding_pack_details').select('*').in('user_id', userIds),
+          supabaseClient.from('allocations').select('user_id, asset_class, weight, value, return_1d, return_1w, return_1m, return_ytd, return_1y, as_of_date, security_id, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }),
+          supabaseClient.from('stock_holdings').select('user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", as_of_date, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false })
+        ]);
 
-        if (!onboardingError && onboarding) {
-          kycMap = onboarding.reduce((acc, row) => {
+        if (!onboardingRes.error && onboardingRes.data) {
+          kycMap = onboardingRes.data.reduce((acc, row) => {
             acc[row.user_id] = {
               status: row.kyc_status || 'Not initiated',
               externalUserId: row.user_id || ''
@@ -4762,13 +4795,8 @@
           }, {});
         }
 
-        const { data: packRows, error: packError } = await supabaseClient
-          .from('user_onboarding_pack_details')
-          .select('*')
-          .in('user_id', userIds);
-
-        if (!packError && packRows) {
-          packRows.forEach(row => {
+        if (!packRes.error && packRes.data) {
+          packRes.data.forEach(row => {
             packDetailsRowMap[row.user_id] = row;
             if (row.user_id && row.pack_details) {
               packJsonMap[row.user_id] = row.pack_details;
@@ -4776,26 +4804,17 @@
           });
         }
 
-        const { data: allocationsRows, error: allocationsError } = await supabaseClient
-          .from('allocations')
-          .select('user_id, asset_class, weight, value, return_1d, return_1w, return_1m, return_ytd, return_1y, as_of_date, security_id, created_at, updated_at')
-          .in('user_id', userIds)
-          .order('updated_at', { ascending: false });
-
-        if (!allocationsError && allocationsRows) {
-          allocationsRows.forEach((row) => {
+        if (!allocationsRes.error && allocationsRes.data) {
+          allocationsRes.data.forEach((row) => {
             if (!allocationsByUserMap[row.user_id]) allocationsByUserMap[row.user_id] = [];
             allocationsByUserMap[row.user_id].push(row);
           });
         }
 
-        const { data: holdingsRows, error: holdingsError } = await supabaseClient
-          .from('stock_holdings')
-          .select('user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", as_of_date, created_at, updated_at')
-          .in('user_id', userIds)
-          .order('updated_at', { ascending: false });
+        const holdingsRows = (!holdingsRes.error && holdingsRes.data) ? holdingsRes.data : [];
+        const allocationsRows = (!allocationsRes.error && allocationsRes.data) ? allocationsRes.data : [];
 
-        if (!holdingsError && holdingsRows) {
+        if (holdingsRows.length) {
           holdingsRows.forEach((row) => {
             if (!holdingsByUserMap[row.user_id]) holdingsByUserMap[row.user_id] = [];
             holdingsByUserMap[row.user_id].push(row);
@@ -4803,7 +4822,7 @@
 
           const securityIds = [...new Set([
             ...holdingsRows.map(row => row.security_id),
-            ...(allocationsRows || []).map(row => row.security_id)
+            ...allocationsRows.map(row => row.security_id)
           ].filter(Boolean))];
           if (securityIds.length) {
             const { data: securityRows, error: securitiesError } = await supabaseClient
