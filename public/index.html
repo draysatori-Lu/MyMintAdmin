@@ -2922,7 +2922,6 @@
               <tr>
                 <th>Full Names</th>
                 <th>Telephone Number</th>
-                <th>Fax Number</th>
                 <th>Postal Address</th>
                 <th>Physical Address</th>
                 <th>Banking Details</th>
@@ -2931,7 +2930,7 @@
               </tr>
             </thead>
             <tbody id="completedTableBody">
-              <tr><td class="completed-table-empty" colspan="8">Switch to Completed filter and open Table view.</td></tr>
+              <tr><td class="completed-table-empty" colspan="7">Switch to Completed filter and open Table view.</td></tr>
             </tbody>
           </table>
         </div>
@@ -3636,22 +3635,19 @@
       return isSameLocalDay(new Date(createdTimestamp), new Date());
     };
 
-    const getFaxForProfile = (profile = {}) => {
-      const keys = ['fax_number', 'faxNumber', 'fax', 'work_fax', 'home_fax'];
-      for (const key of keys) {
-        if (profile?.[key]) return String(profile[key]);
-      }
-      return '';
-    };
-
-    const getBankingDetailsForProfile = (profile = {}) => {
+    const getBankingDetailsForProfile = (profileId, profile = {}) => {
+      const onboardingRow = onboardingMap[profileId] || {};
       const parts = [
-        profile?.bank_name ? `Bank: ${profile.bank_name}` : null,
-        (profile?.bank_account_number || profile?.bank_account)
-          ? `Account: ${profile.bank_account_number || profile.bank_account}`
+        onboardingRow?.bank_name || profile?.bank_name
+          ? `Bank: ${onboardingRow?.bank_name || profile?.bank_name}`
+          : null,
+        (onboardingRow?.bank_account_number || profile?.bank_account_number || profile?.bank_account)
+          ? `Account: ${onboardingRow?.bank_account_number || profile?.bank_account_number || profile?.bank_account}`
           : null,
         profile?.bank_account_type ? `Type: ${profile.bank_account_type}` : null,
-        profile?.bank_branch_code ? `Branch: ${profile.bank_branch_code}` : null,
+        onboardingRow?.bank_branch_code || profile?.bank_branch_code
+          ? `Branch: ${onboardingRow?.bank_branch_code || profile?.bank_branch_code}`
+          : null,
         profile?.bank_linked !== undefined ? `Linked: ${profile.bank_linked ? 'Yes' : 'No'}` : null
       ].filter(Boolean);
       return parts.join(' | ');
@@ -3674,10 +3670,9 @@
         profileId,
         fullName,
         telephone: String(mandatePrefill?.phone || profile?.phone_number || '-'),
-        fax: String(getFaxForProfile(profile) || '-'),
         postalAddress: String(mandatePrefill?.postalAddress || profile?.address || '-'),
         physicalAddress: String(mandatePrefill?.residentialAddress || profile?.address || '-'),
-        bankingDetails: String(getBankingDetailsForProfile(profile) || '-'),
+        bankingDetails: String(getBankingDetailsForProfile(profileId, profile) || '-'),
         mandateSigned: hasSignedMandateForProfile(profileId) ? 'Yes' : 'No'
       };
     };
@@ -3688,7 +3683,6 @@
       const header = [
         'Full Names',
         'Telephone Number',
-        'Fax Number',
         'Postal Address',
         'Physical Address',
         'Banking Details',
@@ -3700,7 +3694,6 @@
         lines.push([
           entry.fullName,
           entry.telephone,
-          entry.fax,
           entry.postalAddress,
           entry.physicalAddress,
           entry.bankingDetails,
@@ -3727,7 +3720,7 @@
       if (!completedTableBody) return;
 
       if (!entries.length) {
-        completedTableBody.innerHTML = '<tr><td class="completed-table-empty" colspan="8">No completed users found for current filters.</td></tr>';
+        completedTableBody.innerHTML = '<tr><td class="completed-table-empty" colspan="7">No completed users found for current filters.</td></tr>';
         return;
       }
 
@@ -3735,7 +3728,6 @@
         <tr>
           <td>${escapeHtml(entry.fullName)}</td>
           <td>${escapeHtml(entry.telephone)}</td>
-          <td>${escapeHtml(entry.fax)}</td>
           <td>${escapeHtml(entry.postalAddress)}</td>
           <td>${escapeHtml(entry.physicalAddress)}</td>
           <td>${escapeHtml(entry.bankingDetails)}</td>
