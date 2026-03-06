@@ -1744,23 +1744,12 @@
 
     const maybeCaptureFilledOrderbook = async () => {
       const now = new Date();
+      const dateKey = getArchiveDateKey(now);
 
       if (!isPastFilledCutoff(now)) return;
+      if (hasFilledOrderbookForDate(dateKey)) return;
       if (!allOrderbookRows.length) return;
       if (isCapturingFilledOrderbook) return;
-
-      // Check if these exact rows were already captured (same sourceIds)
-      const currentSourceIds = new Set(
-        allOrderbookRows.flatMap((row) => {
-          const ids = [];
-          if (row.sourceId) ids.push(String(row.sourceId));
-          if (Array.isArray(row.sourceIds)) row.sourceIds.forEach((id) => { if (id) ids.push(String(id)); });
-          return ids;
-        })
-      );
-      const archivedIds = getArchivedSourceIds();
-      const hasNewRows = [...currentSourceIds].some((id) => !archivedIds.has(id));
-      if (!hasNewRows) return;
 
       isCapturingFilledOrderbook = true;
       try {
