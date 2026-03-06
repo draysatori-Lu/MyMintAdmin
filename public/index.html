@@ -198,6 +198,18 @@
       order: 1;
     }
 
+    .quick-filter-stack {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      order: 1;
+    }
+
+    .quick-filter-row-secondary {
+      gap: 8px;
+    }
+
     .quick-filter-pill {
       padding: 8px 14px;
       background: transparent;
@@ -2815,6 +2827,10 @@
         width: 100%;
       }
 
+      .quick-filter-stack {
+        width: 100%;
+      }
+
       .top-nav {
         padding: 15px 20px;
       }
@@ -2886,22 +2902,26 @@
       <div class="simple-view-header">
         <h2 class="simple-view-title">Profiles</h2>
         <div class="user-count-wrap">
-          <div class="quick-filter-row" aria-label="User filters">
-            <button class="quick-filter-pill active" type="button" data-kyc-pill="all">All</button>
-            <button class="quick-filter-pill" type="button" data-kyc-pill="completed">Completed</button>
-            <button class="quick-filter-pill" type="button" data-kyc-pill="pending">Pending</button>
-            <button class="quick-filter-pill" type="button" data-kyc-pill="rejected">Rejected</button>
-            <button class="quick-filter-pill" type="button" data-kyc-pill="not-completed">Not completed</button>
-            <div class="bank-filter-wrap">
-              <button class="quick-filter-pill" id="bankFilterBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="bankFilterMenu">Bank ▾</button>
-              <div class="bank-filter-menu" id="bankFilterMenu" role="menu" aria-label="Bank filter">
-                <button class="bank-filter-option active" type="button" data-bank-filter="all" role="menuitem">All banks</button>
-                <button class="bank-filter-option" type="button" data-bank-filter="linked" role="menuitem">Linked bank</button>
-                <button class="bank-filter-option" type="button" data-bank-filter="unlinked" role="menuitem">Unlinked bank</button>
+          <div class="quick-filter-stack" aria-label="User filters">
+            <div class="quick-filter-row">
+              <button class="quick-filter-pill active" type="button" data-kyc-pill="all">All</button>
+              <button class="quick-filter-pill" type="button" data-kyc-pill="completed">Completed</button>
+              <button class="quick-filter-pill" type="button" data-kyc-pill="pending">Pending</button>
+              <button class="quick-filter-pill" type="button" data-kyc-pill="rejected">Rejected</button>
+              <button class="quick-filter-pill" type="button" data-kyc-pill="not-completed">Not completed</button>
+              <div class="bank-filter-wrap">
+                <button class="quick-filter-pill" id="bankFilterBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="bankFilterMenu">Bank ▾</button>
+                <div class="bank-filter-menu" id="bankFilterMenu" role="menu" aria-label="Bank filter">
+                  <button class="bank-filter-option active" type="button" data-bank-filter="all" role="menuitem">All banks</button>
+                  <button class="bank-filter-option" type="button" data-bank-filter="linked" role="menuitem">Linked bank</button>
+                  <button class="bank-filter-option" type="button" data-bank-filter="unlinked" role="menuitem">Unlinked bank</button>
+                </div>
               </div>
             </div>
-            <button class="quick-filter-pill table-view-toggle-btn" id="completedTableViewBtn" type="button" aria-expanded="false" aria-controls="completedTablePanel">Table view ▾</button>
-            <button class="quick-filter-pill table-view-toggle-btn" id="notCompletedEmailViewBtn" type="button" aria-expanded="false" aria-controls="notCompletedEmailPanel">Email view ▾</button>
+            <div class="quick-filter-row quick-filter-row-secondary">
+              <button class="quick-filter-pill table-view-toggle-btn" id="completedTableViewBtn" type="button" aria-expanded="false" aria-controls="completedTablePanel">Table view ▾</button>
+              <button class="quick-filter-pill table-view-toggle-btn" id="notCompletedEmailViewBtn" type="button" aria-expanded="false" aria-controls="notCompletedEmailPanel">Email view ▾</button>
+            </div>
           </div>
           <button class="user-count-badge" id="userCountBadge" type="button" aria-live="polite" aria-atomic="true">
             <span class="user-count-dot" aria-hidden="true"></span>
