@@ -160,7 +160,7 @@
     .user-count-wrap {
       position: relative;
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: flex-end;
       gap: 10px;
       flex-wrap: wrap;
@@ -2917,17 +2917,17 @@
                   <button class="bank-filter-option" type="button" data-bank-filter="unlinked" role="menuitem">Unlinked bank</button>
                 </div>
               </div>
+              <button class="user-count-badge" id="userCountBadge" type="button" aria-live="polite" aria-atomic="true" style="margin-left:auto">
+                <span class="user-count-dot" aria-hidden="true"></span>
+                <span class="user-count-number" id="userCount">0</span>
+                <span id="userCountLabel">users</span>
+              </button>
             </div>
             <div class="quick-filter-row quick-filter-row-secondary">
               <button class="quick-filter-pill table-view-toggle-btn" id="completedTableViewBtn" type="button" aria-expanded="false" aria-controls="completedTablePanel">Table view ▾</button>
               <button class="quick-filter-pill table-view-toggle-btn" id="notCompletedEmailViewBtn" type="button" aria-expanded="false" aria-controls="notCompletedEmailPanel">Email view ▾</button>
             </div>
           </div>
-          <button class="user-count-badge" id="userCountBadge" type="button" aria-live="polite" aria-atomic="true">
-            <span class="user-count-dot" aria-hidden="true"></span>
-            <span class="user-count-number" id="userCount">0</span>
-            <span id="userCountLabel">users</span>
-          </button>
         </div>
       </div>
       <div class="simple-list" id="profilesList"></div>
