@@ -338,6 +338,50 @@
       display: none;
     }
 
+    .strate-bir-individual-row {
+      cursor: pointer;
+    }
+
+    .strate-bir-individual-row:hover td {
+      background: #f8fafc;
+    }
+
+    .strate-bir-individual-details {
+      background: #f8fafc;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid #e5e7eb;
+    }
+
+    .strate-bir-individual-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .strate-bir-individual-kv {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .strate-bir-individual-kv strong {
+      display: block;
+      font-size: 0.74rem;
+      color: #64748b;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .strate-bir-individual-kv span {
+      font-size: 0.84rem;
+      color: #1f2937;
+      font-weight: 600;
+    }
+
     .orderbook-table-wrap {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
@@ -755,6 +799,7 @@
               <select class="strate-bir-filter-select" id="strateBirTypeFilter" aria-label="Select Strate table view style">
                 <option value="simple">Simple view</option>
                 <option value="accurate">Accurate view</option>
+                <option value="individual">Individual view</option>
               </select>
               <button class="orderbook-export-btn" id="toggleStrateBirViewBtn" type="button">Table view</button>
               <button class="orderbook-export-btn" id="exportStrateBirBtn" type="button" disabled>Generate TXT</button>
@@ -809,6 +854,7 @@
     let allBirSourceRows = [];
     let strateBirPreviewMode = 'table';
     let strateBirTableViewMode = 'simple';
+    let strateBirExpandedIndividualRef = '';
     const strateBirCollapsedGroups = {
       H1: false,
       B1: false,
@@ -1877,6 +1923,178 @@
       strateBirPreviewBody.innerHTML = rowsHtml.join('');
     };
 
+    const toNumeric = (value) => {
+      const numeric = Number(String(value || '').replace(/,/g, ''));
+      return Number.isFinite(numeric) ? numeric : 0;
+    };
+
+    const formatMoney = (value) => {
+      const numeric = toNumeric(value);
+      return `R ${numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    const buildStrateBirIndividuals = (lines) => {
+      const parsedRows = lines.map((line, index) => parseStrateBirLine(line, index + 1));
+      const byOwnerRef = {};
+      let headerRow = null;
+      let trailerRow = null;
+
+      parsedRows.forEach((row) => {
+        const recordType = String(row.recordType || '').toUpperCase();
+        if (recordType === 'H1') {
+          headerRow = row;
+          return;
+        }
+        if (recordType === 'T1') {
+          trailerRow = row;
+          return;
+        }
+
+        const ownerRef = String(row.beneficialOwnerRef || '').trim();
+        if (!ownerRef) return;
+
+        if (!byOwnerRef[ownerRef]) {
+          byOwnerRef[ownerRef] = {
+            ownerRef,
+            b1: null,
+            b2: null,
+            holdings: [],
+            rawRows: []
+          };
+        }
+
+        const bucket = byOwnerRef[ownerRef];
+        bucket.rawRows.push(row);
+
+        if (recordType === 'B1') {
+          bucket.b1 = row;
+          return;
+        }
+        if (recordType === 'B2') {
+          bucket.b2 = row;
+          return;
+        }
+        if (recordType === 'B3') {
+          bucket.holdings.push(row);
+        }
+      });
+
+      const individuals = Object.values(byOwnerRef)
+        .map((person) => {
+          const totalMarketValue = person.holdings.reduce((sum, holding) => sum + toNumeric(holding.marketValue), 0);
+          return {
+            ...person,
+            participantAccount: person.b1?.participantAccount || person.holdings[0]?.participantAccount || '-',
+            ownerType: person.b1?.ownerType || '-',
+            ownerName: person.b1?.beneficialOwnerName || '-',
+            country: person.b1?.country || person.b2?.country || '-',
+            holdingsCount: person.holdings.length,
+            totalMarketValue
+          };
+        })
+        .sort((a, b) => String(a.ownerName || '').localeCompare(String(b.ownerName || '')));
+
+      return {
+        headerRow,
+        trailerRow,
+        individuals
+      };
+    };
+
+    const renderStrateBirTablePreviewIndividual = (lines) => {
+      if (!strateBirPreviewBody || !strateBirPreviewHead) return;
+
+      strateBirPreviewHead.innerHTML = `
+        <tr>
+          <th>Beneficial Owner Name</th>
+          <th>Owner Ref</th>
+          <th>Account</th>
+          <th>Owner Type</th>
+          <th>Holdings</th>
+          <th>Total Market Value</th>
+          <th>Country</th>
+        </tr>
+      `;
+
+      const { headerRow, trailerRow, individuals } = buildStrateBirIndividuals(lines);
+      if (!individuals.length) {
+        strateBirPreviewBody.innerHTML = '<tr><td class="orderbook-empty-row" colspan="7">No individuals found in the current BIR payload.</td></tr>';
+        return;
+      }
+
+      strateBirPreviewBody.innerHTML = individuals.map((person) => {
+        const rowKey = escapeHtml(person.ownerRef || person.participantAccount || person.ownerName || '-');
+        const isOpen = strateBirExpandedIndividualRef === rowKey;
+
+        const identityHtml = `
+          <div class="strate-bir-individual-kv"><strong>Owner Name</strong><span>${escapeHtml(person.ownerName || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Owner Ref</strong><span>${escapeHtml(person.ownerRef || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Participant Account</strong><span>${escapeHtml(person.participantAccount || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Owner Type</strong><span>${escapeHtml(person.ownerType || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>ID Type</strong><span>${escapeHtml(person.b1?.idType || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>ID Number</strong><span>${escapeHtml(person.b1?.idNumber || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Address</strong><span>${escapeHtml([person.b2?.addressLine1 || '-', person.b2?.addressLine2 || '-'].filter(Boolean).join(', '))}</span></div>
+          <div class="strate-bir-individual-kv"><strong>City / Postal</strong><span>${escapeHtml(`${person.b2?.city || '-'} / ${person.b2?.postalCode || '-'}`)}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Country</strong><span>${escapeHtml(person.country || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>File Reference</strong><span>${escapeHtml(headerRow?.fileReference || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>File Date</strong><span>${escapeHtml(headerRow?.fileCreationDate || '-')}</span></div>
+          <div class="strate-bir-individual-kv"><strong>Trailer Count</strong><span>${escapeHtml(trailerRow?.trailerTotalRecords || '-')}</span></div>
+        `;
+
+        const holdingsRowsHtml = person.holdings.length
+          ? person.holdings.map((holding) => `
+              <tr>
+                <td>${escapeHtml(String(holding.lineNumber || '-'))}</td>
+                <td>${escapeHtml(holding.isin || '-')}</td>
+                <td>${escapeHtml(holding.securityDescription || '-')}</td>
+                <td>${escapeHtml(holding.quantity || '-')}</td>
+                <td>${escapeHtml(holding.balanceType || '-')}</td>
+                <td>${escapeHtml(holding.marketValue || '-')}</td>
+                <td>${escapeHtml(holding.recordDate || '-')}</td>
+                <td>${escapeHtml(holding.settlementRef || '-')}</td>
+              </tr>
+            `).join('')
+          : '<tr><td class="orderbook-empty-row" colspan="8">No B3 holdings for this individual.</td></tr>';
+
+        return `
+          <tr class="strate-bir-individual-row" data-strate-individual-main-row data-owner-ref="${rowKey}">
+            <td>${escapeHtml(person.ownerName || '-')}</td>
+            <td>${escapeHtml(person.ownerRef || '-')}</td>
+            <td>${escapeHtml(person.participantAccount || '-')}</td>
+            <td>${escapeHtml(person.ownerType || '-')}</td>
+            <td>${escapeHtml(String(person.holdingsCount))}</td>
+            <td>${escapeHtml(formatMoney(person.totalMarketValue))}</td>
+            <td>${escapeHtml(person.country || '-')}</td>
+          </tr>
+          <tr class="orderbook-detail-row${isOpen ? '' : ' is-hidden'}" data-strate-individual-detail-row data-owner-ref="${rowKey}">
+            <td colspan="7">
+              <div class="strate-bir-individual-details">
+                <div class="orderbook-detail-title">BIR details for ${escapeHtml(person.ownerName || person.ownerRef || 'individual')}</div>
+                <div class="strate-bir-individual-grid">${identityHtml}</div>
+                <div class="orderbook-detail-table-wrap">
+                  <table class="orderbook-detail-table">
+                    <thead>
+                      <tr>
+                        <th>Line</th>
+                        <th>ISIN</th>
+                        <th>Security</th>
+                        <th>Quantity</th>
+                        <th>Balance Type</th>
+                        <th>Market Value</th>
+                        <th>Record Date</th>
+                        <th>Settlement Ref</th>
+                      </tr>
+                    </thead>
+                    <tbody>${holdingsRowsHtml}</tbody>
+                  </table>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    };
+
     const syncStrateBirViewToggleButton = () => {
       if (!toggleStrateBirViewBtn) return;
       const tableMode = strateBirPreviewMode === 'table';
@@ -1916,6 +2134,8 @@
       if (strateBirPreviewMode === 'table') {
         if (strateBirTableViewMode === 'accurate') {
           renderStrateBirTablePreviewAccurate(lines);
+        } else if (strateBirTableViewMode === 'individual') {
+          renderStrateBirTablePreviewIndividual(lines);
         } else {
           renderStrateBirTablePreviewSimple(lines);
         }
@@ -2894,7 +3114,12 @@
     if (strateBirTypeFilter) {
       strateBirTypeFilter.addEventListener('change', () => {
         const selected = String(strateBirTypeFilter.value || 'simple').toLowerCase();
-        strateBirTableViewMode = selected === 'accurate' ? 'accurate' : 'simple';
+        if (selected === 'accurate' || selected === 'individual') {
+          strateBirTableViewMode = selected;
+        } else {
+          strateBirTableViewMode = 'simple';
+        }
+        strateBirExpandedIndividualRef = '';
         renderStrateBirPreview();
       });
     }
@@ -2902,10 +3127,19 @@
     if (strateBirPreviewBody) {
       strateBirPreviewBody.addEventListener('click', (event) => {
         const toggleRow = event.target.closest('[data-strate-group-toggle]');
-        if (!toggleRow) return;
-        const recordType = String(toggleRow.dataset.recordType || '').toUpperCase();
-        if (!recordType) return;
-        strateBirCollapsedGroups[recordType] = !strateBirCollapsedGroups[recordType];
+        if (toggleRow) {
+          const recordType = String(toggleRow.dataset.recordType || '').toUpperCase();
+          if (!recordType) return;
+          strateBirCollapsedGroups[recordType] = !strateBirCollapsedGroups[recordType];
+          renderStrateBirPreview();
+          return;
+        }
+
+        const individualRow = event.target.closest('[data-strate-individual-main-row]');
+        if (!individualRow) return;
+        const ownerRef = String(individualRow.dataset.ownerRef || '').trim();
+        if (!ownerRef) return;
+        strateBirExpandedIndividualRef = strateBirExpandedIndividualRef === ownerRef ? '' : ownerRef;
         renderStrateBirPreview();
       });
     }
