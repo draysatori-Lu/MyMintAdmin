@@ -256,6 +256,13 @@
       flex-wrap: wrap;
     }
 
+    .orderbook-toolbar-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .orderbook-count {
       color: var(--text-muted);
       font-size: 0.85rem;
@@ -283,6 +290,12 @@
     .orderbook-export-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .orderbook-export-btn.is-active {
+      background: #f5f3ff;
+      color: #6d28d9;
+      border-color: #ddd6fe;
     }
 
     .orderbook-table-wrap {
@@ -698,11 +711,14 @@
           <p class="closed-books-subtitle">Generates pipe-delimited H1, B1, B2, B3, and T1 records in Strate sequence.</p>
           <div class="orderbook-toolbar">
             <div class="orderbook-count" id="strateBirCount">0 records</div>
-            <button class="orderbook-export-btn" id="exportStrateBirBtn" type="button" disabled>Generate TXT</button>
+            <div class="orderbook-toolbar-actions">
+              <button class="orderbook-export-btn" id="toggleStrateBirViewBtn" type="button">Table view</button>
+              <button class="orderbook-export-btn" id="exportStrateBirBtn" type="button" disabled>Generate TXT</button>
+            </div>
           </div>
           <div class="orderbook-table-wrap">
             <table class="orderbook-table" style="min-width: 680px;">
-              <thead>
+              <thead id="strateBirPreviewHead">
                 <tr>
                   <th style="width: 92px;">Line</th>
                   <th>Record</th>
@@ -740,10 +756,13 @@
     const closedBooksPanel = document.getElementById('closedBooksPanel');
     const strateBirCount = document.getElementById('strateBirCount');
     const exportStrateBirBtn = document.getElementById('exportStrateBirBtn');
+    const toggleStrateBirViewBtn = document.getElementById('toggleStrateBirViewBtn');
+    const strateBirPreviewHead = document.getElementById('strateBirPreviewHead');
     const strateBirPreviewBody = document.getElementById('strateBirPreviewBody');
     let allOrderbookRows = [];
     let allOrderbookRawRows = [];
     let allBirSourceRows = [];
+    let strateBirPreviewMode = 'table';
     let activeOrderbookSequence = 1;
     let timerHighlightUntil = 0;
     let isCapturingFilledOrderbook = false;
@@ -1559,19 +1578,116 @@
       };
     };
 
-    const renderStrateBirPreview = () => {
-      if (!strateBirPreviewBody || !strateBirCount || !exportStrateBirBtn) return;
+    const getStrateBirTableHeaders = () => {
+      return [
+        'Line',
+        'Record Type',
+        'Participant Code',
+        'File Creation Date',
+        'File Creation Time',
+        'File Reference',
+        'Participant Account',
+        'Beneficial Owner Ref',
+        'Owner Type',
+        'Beneficial Owner Name',
+        'ID Type',
+        'ID Number',
+        'Address Type',
+        'Address Line 1',
+        'Address Line 2',
+        'City',
+        'Postal Code',
+        'Country',
+        'ISIN',
+        'Security Description',
+        'Quantity',
+        'Balance Type',
+        'Market Value',
+        'Record Date',
+        'Settlement Ref',
+        'Trailer Total Records'
+      ];
+    };
 
-      const payload = buildStrateBirPayload();
-      const lines = payload.lines || [];
-      const hasData = lines.length > 2;
-      exportStrateBirBtn.disabled = !hasData;
-      strateBirCount.textContent = `${payload.totalRecords} records (${payload.clientCount} clients, ${payload.holdingCount} holdings)`;
+    const parseStrateBirLine = (line, lineNumber) => {
+      const parts = String(line || '').split('|');
+      const recordType = sanitizePipeField(parts[0] || '');
+      const parsed = {
+        lineNumber,
+        recordType,
+        participantCode: '',
+        fileCreationDate: '',
+        fileCreationTime: '',
+        fileReference: '',
+        participantAccount: '',
+        beneficialOwnerRef: '',
+        ownerType: '',
+        beneficialOwnerName: '',
+        idType: '',
+        idNumber: '',
+        addressType: '',
+        addressLine1: '',
+        addressLine2: '',
+        city: '',
+        postalCode: '',
+        country: '',
+        isin: '',
+        securityDescription: '',
+        quantity: '',
+        balanceType: '',
+        marketValue: '',
+        recordDate: '',
+        settlementRef: '',
+        trailerTotalRecords: ''
+      };
 
-      if (!lines.length) {
-        strateBirPreviewBody.innerHTML = '<tr><td class="orderbook-empty-row" colspan="2">No BIR records generated yet.</td></tr>';
-        return;
+      if (recordType === 'H1') {
+        parsed.participantCode = sanitizePipeField(parts[1] || '');
+        parsed.fileCreationDate = sanitizePipeField(parts[2] || '');
+        parsed.fileCreationTime = sanitizePipeField(parts[3] || '');
+        parsed.fileReference = sanitizePipeField(parts[4] || '');
+      } else if (recordType === 'B1') {
+        parsed.participantAccount = sanitizePipeField(parts[1] || '');
+        parsed.beneficialOwnerRef = sanitizePipeField(parts[2] || '');
+        parsed.ownerType = sanitizePipeField(parts[3] || '');
+        parsed.beneficialOwnerName = sanitizePipeField(parts[4] || '');
+        parsed.idType = sanitizePipeField(parts[5] || '');
+        parsed.idNumber = sanitizePipeField(parts[6] || '');
+        parsed.country = sanitizePipeField(parts[7] || '');
+      } else if (recordType === 'B2') {
+        parsed.beneficialOwnerRef = sanitizePipeField(parts[1] || '');
+        parsed.addressType = sanitizePipeField(parts[2] || '');
+        parsed.addressLine1 = sanitizePipeField(parts[3] || '');
+        parsed.addressLine2 = sanitizePipeField(parts[4] || '');
+        parsed.city = sanitizePipeField(parts[5] || '');
+        parsed.postalCode = sanitizePipeField(parts[6] || '');
+        parsed.country = sanitizePipeField(parts[7] || '');
+      } else if (recordType === 'B3') {
+        parsed.beneficialOwnerRef = sanitizePipeField(parts[1] || '');
+        parsed.isin = sanitizePipeField(parts[2] || '');
+        parsed.securityDescription = sanitizePipeField(parts[3] || '');
+        parsed.participantAccount = sanitizePipeField(parts[4] || '');
+        parsed.quantity = sanitizePipeField(parts[5] || '');
+        parsed.balanceType = sanitizePipeField(parts[6] || '');
+        parsed.marketValue = sanitizePipeField(parts[7] || '');
+        parsed.recordDate = sanitizePipeField(parts[8] || '');
+        parsed.settlementRef = sanitizePipeField(parts[9] || '');
+      } else if (recordType === 'T1') {
+        parsed.trailerTotalRecords = sanitizePipeField(parts[1] || '');
       }
+
+      return parsed;
+    };
+
+    const renderStrateBirRawPreview = (lines) => {
+      if (!strateBirPreviewBody || !strateBirPreviewHead) return;
+
+      strateBirPreviewHead.innerHTML = `
+        <tr>
+          <th style="width: 92px;">Line</th>
+          <th>Record</th>
+        </tr>
+      `;
 
       strateBirPreviewBody.innerHTML = lines.map((line, index) => {
         return `
@@ -1581,6 +1697,86 @@
           </tr>
         `;
       }).join('');
+    };
+
+    const renderStrateBirTablePreview = (lines) => {
+      if (!strateBirPreviewBody || !strateBirPreviewHead) return;
+
+      const headers = getStrateBirTableHeaders();
+      strateBirPreviewHead.innerHTML = `<tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
+
+      const rows = lines.map((line, index) => parseStrateBirLine(line, index + 1));
+      strateBirPreviewBody.innerHTML = rows.map((row) => {
+        return `
+          <tr>
+            <td>${escapeHtml(String(row.lineNumber))}</td>
+            <td>${escapeHtml(row.recordType)}</td>
+            <td>${escapeHtml(row.participantCode)}</td>
+            <td>${escapeHtml(row.fileCreationDate)}</td>
+            <td>${escapeHtml(row.fileCreationTime)}</td>
+            <td>${escapeHtml(row.fileReference)}</td>
+            <td>${escapeHtml(row.participantAccount)}</td>
+            <td>${escapeHtml(row.beneficialOwnerRef)}</td>
+            <td>${escapeHtml(row.ownerType)}</td>
+            <td>${escapeHtml(row.beneficialOwnerName)}</td>
+            <td>${escapeHtml(row.idType)}</td>
+            <td>${escapeHtml(row.idNumber)}</td>
+            <td>${escapeHtml(row.addressType)}</td>
+            <td>${escapeHtml(row.addressLine1)}</td>
+            <td>${escapeHtml(row.addressLine2)}</td>
+            <td>${escapeHtml(row.city)}</td>
+            <td>${escapeHtml(row.postalCode)}</td>
+            <td>${escapeHtml(row.country)}</td>
+            <td>${escapeHtml(row.isin)}</td>
+            <td>${escapeHtml(row.securityDescription)}</td>
+            <td>${escapeHtml(row.quantity)}</td>
+            <td>${escapeHtml(row.balanceType)}</td>
+            <td>${escapeHtml(row.marketValue)}</td>
+            <td>${escapeHtml(row.recordDate)}</td>
+            <td>${escapeHtml(row.settlementRef)}</td>
+            <td>${escapeHtml(row.trailerTotalRecords)}</td>
+          </tr>
+        `;
+      }).join('');
+    };
+
+    const syncStrateBirViewToggleButton = () => {
+      if (!toggleStrateBirViewBtn) return;
+      const tableMode = strateBirPreviewMode === 'table';
+      toggleStrateBirViewBtn.textContent = tableMode ? 'Raw view' : 'Table view';
+      toggleStrateBirViewBtn.classList.toggle('is-active', tableMode);
+      toggleStrateBirViewBtn.setAttribute('aria-pressed', tableMode ? 'true' : 'false');
+    };
+
+    const renderStrateBirPreview = () => {
+      if (!strateBirPreviewBody || !strateBirCount || !exportStrateBirBtn) return;
+
+      const payload = buildStrateBirPayload();
+      const lines = payload.lines || [];
+      const hasData = lines.length > 2;
+      exportStrateBirBtn.disabled = !hasData;
+      syncStrateBirViewToggleButton();
+      strateBirCount.textContent = `${payload.totalRecords} records (${payload.clientCount} clients, ${payload.holdingCount} holdings)`;
+
+      if (!lines.length) {
+        const emptyColspan = strateBirPreviewMode === 'table' ? getStrateBirTableHeaders().length : 2;
+        if (strateBirPreviewHead) {
+          if (strateBirPreviewMode === 'table') {
+            strateBirPreviewHead.innerHTML = `<tr>${getStrateBirTableHeaders().map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr>`;
+          } else {
+            strateBirPreviewHead.innerHTML = '<tr><th style="width: 92px;">Line</th><th>Record</th></tr>';
+          }
+        }
+        strateBirPreviewBody.innerHTML = `<tr><td class="orderbook-empty-row" colspan="${emptyColspan}">No BIR records generated yet.</td></tr>`;
+        return;
+      }
+
+      if (strateBirPreviewMode === 'table') {
+        renderStrateBirTablePreview(lines);
+        return;
+      }
+
+      renderStrateBirRawPreview(lines);
     };
 
     const getArchiveDateKey = (dateObj) => `${dateObj.getFullYear()}-${pad2(dateObj.getMonth() + 1)}-${pad2(dateObj.getDate())}`;
@@ -2539,6 +2735,13 @@
         const payload = buildStrateBirPayload();
         if (!payload.lines || payload.lines.length <= 2) return;
         downloadTextFile(payload.fileName, payload.lines.join('\n'));
+      });
+    }
+
+    if (toggleStrateBirViewBtn) {
+      toggleStrateBirViewBtn.addEventListener('click', () => {
+        strateBirPreviewMode = strateBirPreviewMode === 'table' ? 'raw' : 'table';
+        renderStrateBirPreview();
       });
     }
 
