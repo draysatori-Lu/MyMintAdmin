@@ -5329,8 +5329,15 @@
     };
 
     const loadProfiles = async () => {
+      let loaderFallbackTimer = null;
+
       if (profilesList) {
         profilesList.innerHTML = '<div class="profiles-loader"><div class="profiles-loader-spinner"></div><div class="profiles-loader-text">Loading users…</div></div>';
+        loaderFallbackTimer = window.setTimeout(() => {
+          const activeLoader = profilesList.querySelector('.profiles-loader');
+          if (!activeLoader) return;
+          profilesList.innerHTML = '<div class="profiles-loader"><div class="profiles-loader-text">Loading is taking longer than expected. Please refresh the page.</div></div>';
+        }, 9000);
       }
 
       Object.keys(onboardingMap).forEach(key => delete onboardingMap[key]);
@@ -5339,88 +5346,104 @@
       Object.keys(holdingsByUserMap).forEach(key => delete holdingsByUserMap[key]);
       Object.keys(securitiesByIdMap).forEach(key => delete securitiesByIdMap[key]);
 
-      const { data, error } = await supabaseClient
-        .from(PROFILES_TABLE)
-        .select('*')
-        .order('created_at', { ascending: false });
+      try {
+        const { data, error } = await supabaseClient
+          .from(PROFILES_TABLE)
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase load error:', error);
-        return;
-      }
-
-      const profiles = data || [];
-      const userIds = profiles.map(profile => profile.id).filter(Boolean);
-      let kycMap = {};
-
-      if (userIds.length) {
-        const [onboardingRes, packRes, allocationsRes, holdingsRes] = await Promise.all([
-          supabaseClient.from('user_onboarding').select('*').in('user_id', userIds),
-          supabaseClient.from('user_onboarding_pack_details').select('*').in('user_id', userIds),
-          supabaseClient.from('allocations').select('user_id, asset_class, weight, value, return_1d, return_1w, return_1m, return_ytd, return_1y, as_of_date, security_id, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }),
-          supabaseClient.from('stock_holdings').select('user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", as_of_date, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false })
-        ]);
-
-        if (!onboardingRes.error && onboardingRes.data) {
-          kycMap = onboardingRes.data.reduce((acc, row) => {
-            acc[row.user_id] = {
-              status: row.kyc_status || 'Not initiated',
-              externalUserId: row.user_id || ''
-            };
-            onboardingMap[row.user_id] = row;
-            return acc;
-          }, {});
+        if (error) {
+          throw error;
         }
 
-        if (!packRes.error && packRes.data) {
-          packRes.data.forEach(row => {
-            packDetailsRowMap[row.user_id] = row;
-            if (row.user_id && row.pack_details) {
-              packJsonMap[row.user_id] = row.pack_details;
-            }
-          });
-        }
+        const profiles = data || [];
+        const userIds = profiles.map(profile => profile.id).filter(Boolean);
+        let kycMap = {};
 
-        if (!allocationsRes.error && allocationsRes.data) {
-          allocationsRes.data.forEach((row) => {
-            if (!allocationsByUserMap[row.user_id]) allocationsByUserMap[row.user_id] = [];
-            allocationsByUserMap[row.user_id].push(row);
-          });
-        }
+        if (userIds.length) {
+          const [onboardingRes, packRes, allocationsRes, holdingsRes] = await Promise.all([
+            supabaseClient.from('user_onboarding').select('*').in('user_id', userIds),
+            supabaseClient.from('user_onboarding_pack_details').select('*').in('user_id', userIds),
+            supabaseClient.from('allocations').select('user_id, asset_class, weight, value, return_1d, return_1w, return_1m, return_ytd, return_1y, as_of_date, security_id, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }),
+            supabaseClient.from('stock_holdings').select('user_id, security_id, quantity, avg_fill, market_value, unrealized_pnl, status:"Status", fill_date:"Fill_date", exit_date:"Exit_date", as_of_date, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false })
+          ]);
 
-        const holdingsRows = (!holdingsRes.error && holdingsRes.data) ? holdingsRes.data : [];
-        const allocationsRows = (!allocationsRes.error && allocationsRes.data) ? allocationsRes.data : [];
+          if (!onboardingRes.error && onboardingRes.data) {
+            kycMap = onboardingRes.data.reduce((acc, row) => {
+              acc[row.user_id] = {
+                status: row.kyc_status || 'Not initiated',
+                externalUserId: row.user_id || ''
+              };
+              onboardingMap[row.user_id] = row;
+              return acc;
+            }, {});
+          }
 
-        if (holdingsRows.length) {
-          holdingsRows.forEach((row) => {
-            if (!holdingsByUserMap[row.user_id]) holdingsByUserMap[row.user_id] = [];
-            holdingsByUserMap[row.user_id].push(row);
-          });
+          if (!packRes.error && packRes.data) {
+            packRes.data.forEach(row => {
+              packDetailsRowMap[row.user_id] = row;
+              if (row.user_id && row.pack_details) {
+                packJsonMap[row.user_id] = row.pack_details;
+              }
+            });
+          }
 
-          const securityIds = [...new Set([
-            ...holdingsRows.map(row => row.security_id),
-            ...allocationsRows.map(row => row.security_id)
-          ].filter(Boolean))];
-          if (securityIds.length) {
-            const { data: securityRows, error: securitiesError } = await supabaseClient
-              .from('securities')
-              .select('id, symbol, name, logo_url')
-              .in('id', securityIds);
+          if (!allocationsRes.error && allocationsRes.data) {
+            allocationsRes.data.forEach((row) => {
+              if (!allocationsByUserMap[row.user_id]) allocationsByUserMap[row.user_id] = [];
+              allocationsByUserMap[row.user_id].push(row);
+            });
+          }
 
-            if (!securitiesError && securityRows) {
-              securityRows.forEach((security) => {
-                securitiesByIdMap[security.id] = security;
-              });
+          const holdingsRows = (!holdingsRes.error && holdingsRes.data) ? holdingsRes.data : [];
+          const allocationsRows = (!allocationsRes.error && allocationsRes.data) ? allocationsRes.data : [];
+
+          if (holdingsRows.length) {
+            holdingsRows.forEach((row) => {
+              if (!holdingsByUserMap[row.user_id]) holdingsByUserMap[row.user_id] = [];
+              holdingsByUserMap[row.user_id].push(row);
+            });
+
+            const securityIds = [...new Set([
+              ...holdingsRows.map(row => row.security_id),
+              ...allocationsRows.map(row => row.security_id)
+            ].filter(Boolean))];
+            if (securityIds.length) {
+              const { data: securityRows, error: securitiesError } = await supabaseClient
+                .from('securities')
+                .select('id, symbol, name, logo_url')
+                .in('id', securityIds);
+
+              if (!securitiesError && securityRows) {
+                securityRows.forEach((security) => {
+                  securitiesByIdMap[security.id] = security;
+                });
+              }
             }
           }
         }
-      }
 
-      allProfiles = sortProfilesForDisplay(profiles);
-      allKycMap = kycMap;
-      await syncVerifiedUsersPackDetails('launch');
-      renderProfiles(allProfiles, allKycMap);
-      applySearchFilter();
+        allProfiles = sortProfilesForDisplay(profiles);
+        allKycMap = kycMap;
+
+        applySearchFilter();
+
+        try {
+          await syncVerifiedUsersPackDetails('launch');
+          applySearchFilter();
+        } catch (syncError) {
+          console.error('Verified user pack sync failed:', syncError);
+        }
+      } catch (loadError) {
+        console.error('Supabase load error:', loadError);
+        if (profilesList) {
+          profilesList.innerHTML = '<div class="profiles-loader"><div class="profiles-loader-text">Could not load users. Please refresh and try again.</div></div>';
+        }
+      } finally {
+        if (loaderFallbackTimer) {
+          window.clearTimeout(loaderFallbackTimer);
+        }
+      }
     };
 
     const requireSession = async () => {
