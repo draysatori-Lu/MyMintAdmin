@@ -800,7 +800,7 @@
       <div class="orderbook-tab-panel" id="closedBooksPanel" role="tabpanel" aria-labelledby="closedBooksTab">
         <div class="closed-books-card">
           <h2 class="closed-books-title">Closed Books</h2>
-          <p class="closed-books-subtitle">Books move here once every holding is filled and shares the same fill date.</p>
+          <p class="closed-books-subtitle">Books move here once every holding has a fill date.</p>
           <div class="filled-orderbooks-list" id="closedBooksList">
             <div class="filled-orderbook-empty">No closed books yet.</div>
           </div>
@@ -2698,17 +2698,21 @@
 
     const isBookFullyClosed = (book) => {
       const rows = Array.isArray(book?.rows) ? book.rows : [];
-      if (!rows.length) return { closed: false, fillDate: null };
-      if (!holdingFillDateById.size) return { closed: false, fillDate: null };
+      if (!rows.length) return { closed: false, latestFillDate: null };
+      if (!holdingFillDateById.size) return { closed: false, latestFillDate: null };
 
       let allFilled = true;
-      let sharedFillDate = null;
+      let latestFillDate = null;
 
       const checkSourceId = (sid) => {
         if (!sid) { allFilled = false; return; }
         const fd = holdingFillDateById.get(String(sid));
         if (!fd) { allFilled = false; return; }
-        if (!sharedFillDate) sharedFillDate = fd;
+        const ts = new Date(fd).getTime();
+        if (!Number.isFinite(ts)) return;
+        if (!latestFillDate || ts > new Date(latestFillDate).getTime()) {
+          latestFillDate = fd;
+        }
       };
 
       for (const row of rows) {
@@ -2727,7 +2731,7 @@
         if (!allFilled) break;
       }
 
-      return { closed: allFilled, fillDate: sharedFillDate };
+      return { closed: allFilled, latestFillDate };
     };
 
     const renderFilledOrderbooks = () => {
@@ -2739,7 +2743,7 @@
       filledOrderbooksArchive.forEach((book) => {
         const result = isBookFullyClosed(book);
         if (result.closed) {
-          closedBooks.push({ ...book, sharedFillDate: result.fillDate });
+          closedBooks.push({ ...book, latestFillDate: result.latestFillDate });
         } else {
           activeBooks.push(book);
         }
@@ -2834,8 +2838,8 @@
 
       closedBooksList.innerHTML = sorted.map((book) => {
         const rows = Array.isArray(book.rows) ? book.rows : [];
-        const fillDateLabel = book.sharedFillDate
-          ? new Date(book.sharedFillDate).toLocaleDateString()
+        const fillDateLabel = book.latestFillDate
+          ? new Date(book.latestFillDate).toLocaleDateString()
           : '-';
         const body = rows.length
           ? rows.map((row, rowIndex) => {
@@ -2870,7 +2874,8 @@
             <summary class="filled-orderbook-summary">
               <span>${escapeHtml(formatBookTitle(book))}</span>
               <span class="filled-orderbook-meta">
-                <span style="background:#ecfdf3;color:#166534;border:1px solid #86efac;border-radius:999px;padding:3px 8px;font-size:0.72rem;font-weight:700;">Filled: ${escapeHtml(fillDateLabel)}</span>
+                <span style="background:#ecfdf3;color:#166534;border:1px solid #86efac;border-radius:999px;padding:3px 8px;font-size:0.72rem;font-weight:700;">Closed</span>
+                <span>Last fill: ${escapeHtml(fillDateLabel)}</span>
                 <span>${escapeHtml(book.dateLabel || '-')}</span>
               </span>
             </summary>
