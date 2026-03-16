@@ -3323,6 +3323,8 @@
 
       try {
         allOrderbookRows = await loadOrderbookClientSideFallback();
+        // Re-classify archived books now that holdingFillDateById has been populated.
+        renderFilledOrderbooks();
         await maybeBackfillLegacyArchiveSnapshots();
         applySearchFilter();
         renderStrateBirPreview();
