@@ -652,6 +652,42 @@
       box-shadow: 0 3px 8px rgba(153, 27, 27, 0.16);
     }
 
+    .orderbook-plus-toggle {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #6b7280;
+      margin-left: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .orderbook-plus-toggle:hover {
+      color: #374151;
+    }
+
+    .filled-status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .filled-status-pill.is-filled {
+      background: #ecfdf3;
+      color: #166534;
+      border-color: #86efac;
+    }
+
+    .filled-status-pill.is-open {
+      background: #fff7ed;
+      color: #9a3412;
+      border-color: #fdba74;
+    }
+
     .filled-orderbook-details {
       padding: 0 12px 12px;
     }
@@ -889,6 +925,7 @@
     let filledOrderbooksArchive = [];
     let holdingFillDateById = new Map();
     let strategyFillStateById = new Map();
+    let showActiveBooksFilledColumn = false;
 
     const requireSession = async () => {
       const { data } = await supabaseClient.auth.getSession();
@@ -2696,42 +2733,122 @@
       }
     };
 
-    const isBookFullyClosed = (book) => {
-      const rows = Array.isArray(book?.rows) ? book.rows : [];
-      if (!rows.length) return { closed: false, latestFillDate: null };
-      if (!holdingFillDateById.size) return { closed: false, latestFillDate: null };
+    const getRowHoldingIds = (row) => {
+      if (!row) return [];
+
+      const directIds = new Set();
+      if (Array.isArray(row.sourceIds) && row.sourceIds.length) {
+        row.sourceIds.forEach((id) => {
+          if (id) directIds.add(String(id));
+        });
+      }
+      if (row.sourceId) {
+        directIds.add(String(row.sourceId));
+      }
+
+      if (row.isStrategy && Array.isArray(row.strategyHoldings) && row.strategyHoldings.length) {
+        row.strategyHoldings.forEach((holding) => {
+          if (Array.isArray(holding?.sourceIds)) {
+            holding.sourceIds.forEach((id) => {
+              if (id) directIds.add(String(id));
+            });
+          }
+          if (holding?.sourceId) {
+            directIds.add(String(holding.sourceId));
+          }
+        });
+      }
+
+      if (directIds.size) {
+        return Array.from(directIds);
+      }
+
+      const fallbackIds = new Set();
+      const rowSecurityId = String(row.securityId || '').trim();
+      const rowSide = String(row.side || '').trim().toUpperCase();
+      const rowStrategyId = String(row.strategyId || '').trim();
+      const rowInstrument = String(row.instrumentName || '').trim().toLowerCase();
+      const rowTicker = String(row.ticker || '').trim().toLowerCase();
+
+      (allBirSourceRows || []).forEach((raw) => {
+        const rawId = raw?.sourceId ? String(raw.sourceId) : '';
+        if (!rawId) return;
+
+        if (rowStrategyId && String(raw?.strategyId || '').trim() === rowStrategyId) {
+          fallbackIds.add(rawId);
+          return;
+        }
+
+        const rawSecurityId = String(raw?.securityId || '').trim();
+        const rawSide = String(raw?.side || '').trim().toUpperCase();
+        if (rowSecurityId && rawSecurityId && rowSecurityId === rawSecurityId && (!rowSide || rowSide === rawSide)) {
+          fallbackIds.add(rawId);
+          return;
+        }
+
+        const rawInstrument = String(raw?.instrumentName || '').trim().toLowerCase();
+        const rawTicker = String(raw?.ticker || '').trim().toLowerCase();
+        if (rawInstrument === rowInstrument && rawTicker === rowTicker && (!rowSide || rowSide === rawSide)) {
+          fallbackIds.add(rawId);
+        }
+      });
+
+      return Array.from(fallbackIds);
+    };
+
+    const getRowFillStatus = (row) => {
+      const ids = getRowHoldingIds(row);
+      if (!ids.length) {
+        return { filled: false, text: 'Not filled', latestFillDate: null };
+      }
 
       let allFilled = true;
       let latestFillDate = null;
-
-      const checkSourceId = (sid) => {
-        if (!sid) { allFilled = false; return; }
-        const fd = holdingFillDateById.get(String(sid));
-        if (!fd) { allFilled = false; return; }
+      ids.forEach((id) => {
+        const fd = holdingFillDateById.get(String(id));
+        if (!fd) {
+          allFilled = false;
+          return;
+        }
         const ts = new Date(fd).getTime();
         if (!Number.isFinite(ts)) return;
         if (!latestFillDate || ts > new Date(latestFillDate).getTime()) {
           latestFillDate = fd;
         }
-      };
+      });
 
-      for (const row of rows) {
-        if (row.isStrategy && Array.isArray(row.strategyHoldings)) {
-          for (const h of row.strategyHoldings) {
-            const ids = Array.isArray(h.sourceIds) && h.sourceIds.length ? h.sourceIds : (h.sourceId ? [h.sourceId] : []);
-            if (!ids.length) { allFilled = false; break; }
-            ids.forEach(checkSourceId);
-            if (!allFilled) break;
-          }
-        } else {
-          const ids = Array.isArray(row.sourceIds) && row.sourceIds.length ? row.sourceIds : (row.sourceId ? [row.sourceId] : []);
-          if (!ids.length) { allFilled = false; break; }
-          ids.forEach(checkSourceId);
-        }
-        if (!allFilled) break;
+      if (!allFilled) {
+        return { filled: false, text: 'Not filled', latestFillDate };
       }
 
-      return { closed: allFilled, latestFillDate };
+      return {
+        filled: true,
+        text: latestFillDate ? `Filled (${new Date(latestFillDate).toLocaleDateString()})` : 'Filled',
+        latestFillDate
+      };
+    };
+
+    const isBookFullyClosed = (book) => {
+      const rows = Array.isArray(book?.rows) ? book.rows : [];
+      if (!rows.length) return { closed: false, latestFillDate: null };
+      if (!holdingFillDateById.size) return { closed: false, latestFillDate: null };
+
+      let latestFillDate = null;
+
+      for (const row of rows) {
+        const status = getRowFillStatus(row);
+        if (!status.filled) {
+          return { closed: false, latestFillDate: null };
+        }
+        if (status.latestFillDate) {
+          const ts = new Date(status.latestFillDate).getTime();
+          if (!latestFillDate || ts > new Date(latestFillDate).getTime()) {
+            latestFillDate = status.latestFillDate;
+          }
+        }
+      }
+
+      return { closed: true, latestFillDate };
     };
 
     const renderFilledOrderbooks = () => {
@@ -2759,6 +2876,7 @@
         const body = rows.length
           ? rows.map((row, rowIndex) => {
             const rowKey = `${String(book.id || 'book')}-${rowIndex}`;
+            const rowFillStatus = getRowFillStatus(row);
             return `
             <tr class="orderbook-main-row" data-archive-main-row data-archive-line-key="${escapeHtml(rowKey)}">
               <td>${escapeHtml(String(row.line ?? '-'))}</td>
@@ -2772,9 +2890,10 @@
               <td>${escapeHtml(row.settlementAccount || '')}</td>
               <td>${escapeHtml(row.brokerRef || '')}</td>
               <td>${escapeHtml(String(row.unrealizedPnl ?? '-'))}</td>
+              ${showActiveBooksFilledColumn ? `<td><span class="filled-status-pill ${rowFillStatus.filled ? 'is-filled' : 'is-open'}">${escapeHtml(rowFillStatus.text)}</span></td>` : ''}
             </tr>
             <tr class="orderbook-detail-row is-hidden" data-archive-detail-row data-archive-line-key="${escapeHtml(rowKey)}">
-              <td colspan="11">
+              <td colspan="${showActiveBooksFilledColumn ? '12' : '11'}">
                 <div class="orderbook-detail-wrap">
                   ${row.isStrategy ? renderStrategyDetailsTable(row) : `<div class="orderbook-detail-title">BND Allocation Details</div>${renderSnapshotBndDetailsTable(rows, row, book.sequence)}`}
                 </div>
@@ -2809,7 +2928,8 @@
                       <th>Order Type</th>
                       <th>Settlement Account</th>
                       <th>Broker Ref</th>
-                      <th>Unrealized PnL</th>
+                      <th>Unrealized PnL <span class="orderbook-plus-toggle" data-toggle-filled-col title="Toggle filled status">+</span></th>
+                      ${showActiveBooksFilledColumn ? '<th>Filled</th>' : ''}
                     </tr>
                   </thead>
                   <tbody>
@@ -3360,6 +3480,13 @@
 
     if (filledOrderbooksList) {
       filledOrderbooksList.addEventListener('click', async (event) => {
+        const toggleFilledColumn = event.target.closest('[data-toggle-filled-col]');
+        if (toggleFilledColumn) {
+          showActiveBooksFilledColumn = !showActiveBooksFilledColumn;
+          renderFilledOrderbooks();
+          return;
+        }
+
         const retryBtn = event.target.closest('[data-email-retry-btn]');
         if (!retryBtn) return;
 
@@ -3386,7 +3513,7 @@
       });
 
       filledOrderbooksList.addEventListener('click', (event) => {
-        if (event.target.closest('button, a, input, select, summary')) {
+        if (event.target.closest('button, a, input, select, summary, [data-toggle-filled-col]')) {
           return;
         }
 
