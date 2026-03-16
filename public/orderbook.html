@@ -702,6 +702,44 @@
       text-align: center;
     }
 
+    .archive-books-loader {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #6b7280;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .archive-books-loader-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #7c3aed;
+      box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.4);
+      animation: archive-loader-pulse 1.1s ease-in-out infinite;
+      flex: 0 0 auto;
+    }
+
+    @keyframes archive-loader-pulse {
+      0% {
+        transform: scale(0.85);
+        box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.32);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(124, 58, 237, 0);
+      }
+      100% {
+        transform: scale(0.85);
+        box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+      }
+    }
+
     .closed-books-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -926,6 +964,7 @@
     let holdingFillDateById = new Map();
     let strategyFillStateById = new Map();
     let showActiveBooksFilledColumn = false;
+    let isArchiveBooksLoading = true;
     const ARCHIVE_LIVE_SYNC_INTERVAL_MS = 60000;
     let archiveLiveSyncHandle = null;
 
@@ -2698,6 +2737,19 @@
       return '';
     };
 
+    const archiveLoaderHtml = '<div class="archive-books-loader"><span class="archive-books-loader-dot" aria-hidden="true"></span><span>Refreshing archived books...</span></div>';
+
+    const setArchiveBooksLoading = (value) => {
+      isArchiveBooksLoading = Boolean(value);
+      if (!isArchiveBooksLoading) return;
+      if (filledOrderbooksList) {
+        filledOrderbooksList.innerHTML = archiveLoaderHtml;
+      }
+      if (closedBooksList) {
+        closedBooksList.innerHTML = archiveLoaderHtml;
+      }
+    };
+
     const formatBookTitle = (book) => {
       const rawTitle = String(book?.title || '').trim();
       if (rawTitle) {
@@ -3140,6 +3192,10 @@
 
     const renderFilledOrderbooks = () => {
       if (!filledOrderbooksList) return;
+      if (isArchiveBooksLoading) {
+        setArchiveBooksLoading(true);
+        return;
+      }
 
       const activeBooks = [];
       const closedBooks = [];
@@ -3733,11 +3789,11 @@
         return;
       }
 
+      setArchiveBooksLoading(true);
+
       try {
         allOrderbookRows = await loadOrderbookClientSideFallback();
         await reconcileArchivedBooksWithLiveHoldings();
-        // Re-classify archived books now that holdingFillDateById has been populated.
-        renderFilledOrderbooks();
         await maybeBackfillLegacyArchiveSnapshots();
         applySearchFilter();
         renderStrateBirPreview();
@@ -3747,6 +3803,9 @@
         orderbookTableBody.innerHTML = '<tr><td class="orderbook-empty-row" colspan="10">Could not load orderbook data.</td></tr>';
         allBirSourceRows = [];
         renderStrateBirPreview();
+      } finally {
+        isArchiveBooksLoading = false;
+        renderFilledOrderbooks();
       }
     };
 
