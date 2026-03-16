@@ -1574,7 +1574,7 @@
     };
 
     const toCsvContent = (rows) => {
-      const header = ['Line', 'Instrument Name', 'Ticker', 'Side', 'Total QYT', 'Avg Fill', 'Market Value', 'Order Type', 'Settlement Account', 'Broker Ref', 'Unrealized PnL'];
+      const header = ['Buy/sell', 'Equity code', 'Nominal'];
       const csvLines = [header.map(normalizeCsv).join(',')];
 
       const flatRows = [];
@@ -1586,19 +1586,12 @@
         }
       });
 
-      flatRows.forEach((row, index) => {
+      flatRows.forEach((row) => {
+        const tickerWithoutExchangeSuffix = String(row.ticker || '').replace(/\.JO\b/gi, '').trim();
         csvLines.push([
-          index + 1,
-          row.instrumentName,
-          row.ticker,
           row.side,
-          row.totalQuantity,
-          asRandValue(row.avgFill),
-          asRandValue(row.marketValue),
-          row.orderType,
-          row.settlementAccount,
-          row.brokerRef,
-          row.unrealizedPnl
+          tickerWithoutExchangeSuffix,
+          row.totalQuantity
         ].map(normalizeCsv).join(','));
       });
 
