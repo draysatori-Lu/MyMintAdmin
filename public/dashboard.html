@@ -1878,7 +1878,7 @@
 
       const addHolding = (holding) => {
         formHoldings.push(holding);
-        setStrategyWorkspaceVisible(true);
+        if (activeStrategyTabId) setStrategyWorkspaceVisible(true);
         renderFormHoldings();
         recalculate();
       };
@@ -3949,6 +3949,13 @@
 
           tab.addEventListener("click", async (e) => {
             if (e.target.closest("[data-tabmenu]")) return;
+            /* Clicking the already-active tab deselects it */
+            if (activeStrategyTabId === strategy.id) {
+              activeStrategyTabId = null;
+              setStrategyWorkspaceVisible(false);
+              renderStrategyTabs();
+              return;
+            }
             activeStrategyTabId = strategy.id;
             setStrategyWorkspaceVisible(true);
             renderStrategyTabs();
