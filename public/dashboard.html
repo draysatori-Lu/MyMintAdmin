@@ -724,19 +724,11 @@
               <!-- Workspace: hidden until a tab is selected or new strategy started -->
               <div id="strategyWorkspace" style="display: none">
                 <form id="strategyForm">
+                  <!-- Hidden name field — driven by the tab input -->
+                  <input id="strategyName" name="name" type="hidden" />
                   <!-- Strategy metadata header -->
                   <div style="padding: 14px 16px; border-bottom: 1px solid #e8edf3; background: #fafbfe;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr 1fr 1fr; gap: 10px; align-items: start;">
-                      <input
-                        id="strategyName"
-                        name="name"
-                        type="text"
-                        required
-                        style="width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 11px; font-size: 13px; color: #1e293b; outline: none; background: #fff; box-sizing: border-box;"
-                        onfocus="this.style.borderColor='#7c3aed'"
-                        onblur="this.style.borderColor='#e2e8f0'"
-                        placeholder="Strategy name…"
-                      />
+                    <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr; gap: 10px; align-items: start;">
                       <input
                         id="strategyShortName"
                         name="short_name"
@@ -3613,20 +3605,7 @@
         showFormMessage("");
       };
 
-      /* Live-sync: typing in Strategy Name updates the active tab label */
-      const strategyNameInput = document.getElementById("strategyName");
-      if (strategyNameInput) {
-        strategyNameInput.addEventListener("input", () => {
-          if (!activeStrategyTabId) return;
-          const activeTab = document.querySelector(
-            `[data-strategy-id="${activeStrategyTabId}"]`,
-          );
-          if (!activeTab) return;
-          const span = activeTab.querySelector("span");
-          if (span)
-            span.textContent = strategyNameInput.value.trim() || "Untitled";
-        });
-      }
+      /* strategyName is now a hidden field driven by the draft-tab input */
 
       /* ── shared tab context-menu dropdown ── */
       let _tabMenuOpen = null;
@@ -3989,9 +3968,53 @@
       if (newStrategyTabBtn) {
         newStrategyTabBtn.addEventListener("click", () => {
           activeStrategyTabId = null;
-          setStrategyWorkspaceVisible(true);
-          renderStrategyTabs();
           cancelEdit();
+          renderStrategyTabs();
+          setStrategyWorkspaceVisible(true);
+
+          /* Build the draft tab with an inline editable input */
+          const tabsList = document.getElementById("strategyTabsList");
+          if (!tabsList) return;
+
+          const hiddenName = document.getElementById("strategyName");
+
+          const draftWrap = document.createElement("div");
+          draftWrap.className = "draft-strategy-tab";
+          draftWrap.style.cssText = "position:relative;display:flex;align-items:flex-end;";
+
+          const draftTab = document.createElement("div");
+          draftTab.style.cssText = `
+            display:flex;align-items:center;gap:6px;
+            padding:8px 11px 9px 11px;
+            background:#ffffff;
+            border:1.5px solid #ddd6fe;
+            border-bottom:2px solid #ffffff;
+            border-radius:8px 8px 0 0;
+            position:relative;bottom:-2px;z-index:2;`;
+
+          draftTab.innerHTML = `<svg style="width:13px;height:13px;flex-shrink:0;color:#7c3aed" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M3 9h18M9 21V9"/></svg>`;
+
+          const tabInput = document.createElement("input");
+          tabInput.type = "text";
+          tabInput.placeholder = "Strategy name…";
+          tabInput.style.cssText = `
+            border:none;outline:none;background:transparent;
+            font-size:12.5px;font-weight:600;color:#6d28d9;
+            width:140px;min-width:60px;padding:0;margin:0;`;
+
+          tabInput.addEventListener("input", () => {
+            if (hiddenName) hiddenName.value = tabInput.value;
+          });
+
+          tabInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); tabInput.blur(); }
+            if (e.key === "Escape") { cancelEdit(); renderStrategyTabs(); }
+          });
+
+          draftTab.appendChild(tabInput);
+          draftWrap.appendChild(draftTab);
+          tabsList.insertBefore(draftWrap, tabsList.firstChild);
+          tabInput.focus();
         });
       }
 
