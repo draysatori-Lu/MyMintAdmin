@@ -4110,7 +4110,7 @@
               : "";
 
             return `<button type="button" data-sym="${s.symbol}"
-          style="flex-shrink:0;width:192px;display:flex;flex-direction:column;padding:14px;border-radius:16px;cursor:${added ? "default" : "pointer"};text-align:left;background:${cardBg};border:${cardBorder};box-shadow:${cardShadow};transition:all 0.18s;gap:10px;position:relative;overflow:hidden;outline:none;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none;">
+          style="flex-shrink:0;width:192px;display:flex;flex-direction:column;padding:14px;border-radius:16px;cursor:pointer;text-align:left;background:${cardBg};border:${cardBorder};box-shadow:${cardShadow};transition:all 0.18s;gap:10px;position:relative;overflow:hidden;outline:none;-webkit-tap-highlight-color:transparent;-webkit-appearance:none;appearance:none;">
           <!-- subtle top accent bar -->
           <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${barColor2};opacity:${isPos ? "0.6" : "0.5"};border-radius:16px 16px 0 0;"></div>
           ${addedBadge}
@@ -4149,20 +4149,26 @@
             });
           }
           btn.addEventListener("click", () => {
-            const sec = allSecuritiesCache.find((s) => s.symbol === sym);
-            if (
-              sec &&
-              !formHoldings.some((h) => (h.symbol || h.ticker) === sym)
-            ) {
-              addHolding({
-                symbol: sec.symbol,
-                name: sec.name,
-                last_price: sec.last_price || 0,
-                logo_url: sec.logo_url || null,
-                shares: 1,
-                weight: 0,
-              });
+            const existingIdx = formHoldings.findIndex(
+              (h) => (h.symbol || h.ticker) === sym,
+            );
+            if (existingIdx !== -1) {
+              /* Already added — toggle off */
+              removeHolding(existingIdx);
               renderTopAssetsRow();
+            } else {
+              const sec = allSecuritiesCache.find((s) => s.symbol === sym);
+              if (sec) {
+                addHolding({
+                  symbol: sec.symbol,
+                  name: sec.name,
+                  last_price: sec.last_price || 0,
+                  logo_url: sec.logo_url || null,
+                  shares: 1,
+                  weight: 0,
+                });
+                renderTopAssetsRow();
+              }
             }
           });
         });
