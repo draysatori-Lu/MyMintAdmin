@@ -3709,7 +3709,12 @@
       const renderStrategyTabs = () => {
         const tabsList = document.getElementById("strategyTabsList");
         if (!tabsList) return;
+        /* Preserve any in-progress draft tab across re-renders */
+        const existingDraft = tabsList.querySelector(".draft-strategy-tab");
         tabsList.innerHTML = "";
+        if (existingDraft && !activeStrategyTabId) {
+          tabsList.insertBefore(existingDraft, tabsList.firstChild);
+        }
         (allStrategiesFullData || []).forEach((strategy) => {
           const isActive = strategy.id === activeStrategyTabId;
           const wrap = document.createElement("div");
