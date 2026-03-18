@@ -15,6 +15,10 @@
       }
 
       @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes toast-in  { from { opacity:0; transform:translateY(16px) scale(0.96); } to { opacity:1; transform:translateY(0) scale(1); } }
+      @keyframes toast-out { from { opacity:1; transform:translateY(0) scale(1); } to { opacity:0; transform:translateY(8px) scale(0.96); } }
+      @keyframes shake { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-7px)} 30%{transform:translateX(7px)} 45%{transform:translateX(-6px)} 60%{transform:translateX(6px)} 75%{transform:translateX(-4px)} 90%{transform:translateX(4px)} }
+      .toast-shake { animation: toast-in 0.22s ease forwards, shake 0.45s ease 0.1s; }
 
       #securitySearch::placeholder {
         color: #94a3b8;
@@ -1081,6 +1085,43 @@
       const normalizeWebsite = (value) => {
         if (!value) return "";
         return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+      };
+
+      let _toastTimer = null;
+      const showStrategyRequiredToast = () => {
+        let el = document.getElementById("strategyRequiredToast");
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "strategyRequiredToast";
+          el.style.cssText = [
+            "position:fixed", "bottom:28px", "left:50%", "transform:translateX(-50%)",
+            "z-index:99999", "display:flex", "align-items:center", "gap:10px",
+            "background:#1e293b", "color:#f8fafc", "font-size:13px", "font-weight:600",
+            "padding:12px 20px", "border-radius:14px",
+            "box-shadow:0 8px 32px rgba(0,0,0,0.22)", "pointer-events:none",
+            "white-space:nowrap"
+          ].join(";");
+          el.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="#f59e0b"/>
+            </svg>
+            Select or create a strategy first`;
+          document.body.appendChild(el);
+        }
+        /* restart shake each time */
+        el.style.animation = "none";
+        el.offsetHeight; /* reflow */
+        el.classList.add("toast-shake");
+        el.style.animation = "";
+        el.classList.remove("toast-shake");
+        el.offsetHeight;
+        el.classList.add("toast-shake");
+
+        clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(() => {
+          el.style.animation = "toast-out 0.22s ease forwards";
+          setTimeout(() => el.remove(), 230);
+        }, 2800);
       };
 
       const getInitials = (name = "") => {
@@ -4242,6 +4283,10 @@
             });
           }
           btn.addEventListener("click", () => {
+            if (!strategyWorkspaceVisible) {
+              showStrategyRequiredToast();
+              return;
+            }
             const existingIdx = formHoldings.findIndex(
               (h) => (h.symbol || h.ticker) === sym,
             );
