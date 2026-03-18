@@ -1064,12 +1064,12 @@
         const numeric = Number(value);
         if (Number.isNaN(numeric) || numeric === 0) return "Not available";
         try {
-          return `$${new Intl.NumberFormat("en", {
+          return `R${new Intl.NumberFormat("en-ZA", {
             notation: "compact",
             maximumFractionDigits: 1,
           }).format(numeric)}`;
         } catch (error) {
-          return `$${numeric.toLocaleString()}`;
+          return `R${numeric.toLocaleString("en-ZA")}`;
         }
       };
 
@@ -1491,7 +1491,7 @@
             </div>
             <div>
               <p class="font-medium text-slate-800">${name}</p>
-              <p class="text-xs text-slate-500">$${symbol}</p>
+              <p class="text-xs text-slate-500">${symbol} · JSE</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -4198,7 +4198,7 @@
             ${dots}
           </div>
           <!-- price -->
-          <div style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;line-height:1;">${price}</div>
+          <div style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;line-height:1;"><span style="font-size:12px;font-weight:600;color:#64748b;margin-right:1px;">R</span>${price}</div>
           <!-- change pill -->
           <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;background:${pillBg};color:#fff;letter-spacing:0.1px;">${chgStr}</span>
