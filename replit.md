@@ -41,6 +41,9 @@ Internal admin dashboard for the Mint investment platform. Provides client manag
 - Strategies need `status: 'active'` AND `is_public: true` to appear on Mint's OpenStrategies page
 - Missing price data triggers a warning on save
 
+## API Endpoints
+- `POST /api/securities/sync-fundamentals` — Pulls latest price, P/E, dividend, and YTD data from Yahoo Finance for all securities and writes them to the `securities` table. Requires admin Bearer token. Called from the "Sync market data" button in the Strategies tab.
+
 ## Database Tables Used
 - `profiles` - Client profiles
 - `strategies` - Investment strategies with holdings JSON column

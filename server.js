@@ -589,6 +589,96 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (req.url === '/api/securities/sync-fundamentals' && req.method === 'POST') {
+    const token = parseBearerToken(req.headers.authorization);
+    if (!token) { sendJson(res, 401, { error: 'Missing Authorization bearer token' }); return; }
+
+    (async () => {
+      try {
+        await fetchSupabaseJson('/auth/v1/user', token, false);
+
+        const securities = await fetchSupabaseJson(
+          '/rest/v1/securities?select=id,symbol&limit=500',
+          token
+        );
+        if (!Array.isArray(securities) || securities.length === 0) {
+          sendJson(res, 200, { updated: 0, message: 'No securities found' });
+          return;
+        }
+
+        const CHUNK = 50;
+        const updates = [];
+        const errors = [];
+
+        for (let i = 0; i < securities.length; i += CHUNK) {
+          const chunk = securities.slice(i, i + CHUNK);
+          const symbolList = chunk.map(s => s.symbol).filter(Boolean).join(',');
+          if (!symbolList) continue;
+
+          let yahooData = null;
+          try {
+            const yahooRes = await fetch(
+              `https://query1.finance.yahoo.com/v8/finance/quote?symbols=${encodeURIComponent(symbolList)}&fields=trailingPE,dividendRate,dividendYield,ytdReturn,regularMarketPrice,regularMarketChangePercent,marketCap`,
+              { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MintCRM/1.0)' } }
+            );
+            if (yahooRes.ok) yahooData = await yahooRes.json();
+          } catch (e) {
+            errors.push(`Yahoo fetch failed for chunk ${i}: ${e.message}`);
+            continue;
+          }
+
+          const quotes = yahooData?.quoteResponse?.result || [];
+          for (const q of quotes) {
+            const sec = chunk.find(s => s.symbol === q.symbol);
+            if (!sec) continue;
+
+            const patch = {};
+            if (q.trailingPE            != null) patch.pe_ratio            = parseFloat(q.trailingPE.toFixed(4));
+            if (q.dividendRate          != null) patch.dividend_per_share  = parseFloat(q.dividendRate.toFixed(4));
+            if (q.dividendYield         != null) patch.dividend_yield       = parseFloat((q.dividendYield * 100).toFixed(4));
+            if (q.ytdReturn             != null) patch.ytd_performance      = parseFloat((q.ytdReturn * 100).toFixed(4));
+            if (q.marketCap             != null) patch.market_cap           = q.marketCap;
+            if (q.regularMarketPrice    != null) patch.last_price           = Math.round(q.regularMarketPrice * 100);
+            if (q.regularMarketChangePercent != null) patch.change_percent  = parseFloat(q.regularMarketChangePercent.toFixed(4));
+
+            if (Object.keys(patch).length === 0) continue;
+
+            try {
+              const patchUrl = `${supabaseUrl}/rest/v1/securities?id=eq.${encodeURIComponent(sec.id)}`;
+              const patchRes = await fetch(patchUrl, {
+                method: 'PATCH',
+                headers: {
+                  'apikey': supabaseServiceRoleKey,
+                  'Authorization': `Bearer ${supabaseServiceRoleKey}`,
+                  'Content-Type': 'application/json',
+                  'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify(patch)
+              });
+              if (patchRes.ok) {
+                updates.push(q.symbol);
+              } else {
+                const errText = await patchRes.text();
+                errors.push(`PATCH ${q.symbol}: ${errText}`);
+              }
+            } catch (e) {
+              errors.push(`PATCH ${q.symbol}: ${e.message}`);
+            }
+          }
+        }
+
+        sendJson(res, 200, {
+          updated: updates.length,
+          symbols: updates,
+          errors: errors.length ? errors : undefined
+        });
+      } catch (err) {
+        sendJson(res, 500, { error: err.message || 'Sync failed' });
+      }
+    })();
+    return;
+  }
+
   if (req.url.startsWith('/api/sumsub/archive')) {
     (async () => {
       try {
