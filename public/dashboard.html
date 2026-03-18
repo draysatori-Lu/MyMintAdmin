@@ -923,27 +923,6 @@
               </div>
             </div>
 
-            <!-- Clients panel -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm mt-4 px-5 py-4">
-              <div class="flex items-center justify-between mb-3">
-                <div>
-                  <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Client Lots</p>
-                  <p class="text-xs text-slate-400 mt-0.5">Define how many lots each client holds in this strategy</p>
-                </div>
-                <button id="rebAddClientBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition flex items-center gap-1.5">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-                  Add Client
-                </button>
-              </div>
-              <div id="rebClientsGrid" class="flex flex-wrap gap-2"></div>
-              <div id="rebAddClientForm" class="hidden mt-3 flex gap-2 items-center">
-                <input id="rebClientName" type="text" placeholder="Client name" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 w-48"/>
-                <input id="rebClientId" type="text" placeholder="ID (e.g. CLI-007)" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 w-32"/>
-                <input id="rebClientLots" type="number" min="1" placeholder="Lots" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 w-20"/>
-                <button id="rebClientSaveBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-700 transition">Add</button>
-                <button id="rebClientCancelBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Cancel</button>
-              </div>
-            </div>
           </div>
 
           <!-- SELL MODAL -->
@@ -4820,7 +4799,7 @@
 
       /* ── State ── */
       let rebIsins = [];           // [{code, description, unitsPerLot, currentPrice, weightPercent}]
-      let rebClients = [];         // [{id, name, lots}]
+      let rebRawHoldings = {};     // code → [{userId, name, quantity}]
       let rebSelectedIsin = null;
       let rebSelectedStep = null;
       let rebSellNetProceeds = 0;
@@ -4828,7 +4807,16 @@
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const rebTotalLots = () => rebClients.reduce((s, c) => s + c.lots, 0);
+      function rebClientsForIsin(isin) {
+        if (!isin) return [];
+        return (rebRawHoldings[isin.code] || [])
+          .filter(r => r.quantity > 0)
+          .map(r => ({
+            id: r.userId,
+            name: r.name,
+            lots: Math.max(1, Math.round(r.quantity / isin.unitsPerLot)),
+          }));
+      }
 
       /* ── Init strategy selector ── */
       function rebInitStrategySelector() {
@@ -4845,10 +4833,11 @@
         if (currentVal) sel.value = currentVal;
       }
 
-      /* ── Load strategy holdings into ISINs ── */
-      function rebLoadStrategy(strategyId) {
+      /* ── Load strategy holdings into ISINs (+ fetch live client holdings) ── */
+      async function rebLoadStrategy(strategyId) {
         rebSelectedIsin = null;
         rebSelectedStep = null;
+        rebRawHoldings = {};
         const strategy = (allStrategiesFullData || []).find(s => String(s.id) === String(strategyId));
         if (!strategy) { rebIsins = []; rebRenderAll(); return; }
 
@@ -4859,18 +4848,46 @@
             const sym = h.symbol || h.ticker || "";
             const price = h.last_price ? h.last_price / 100 : 0;
             const units = Math.max(1, Math.round(Number(h.shares) || 1));
-            return {
-              code: sym.replace(".JO", ""),
-              fullSymbol: sym,
-              description: h.name || sym,
-              unitsPerLot: units,
-              currentPrice: price,
-              weightPercent: Number(h.weight) || 0,
-            };
+            const code = sym.replace(/\.[A-Z]+$/, "");
+            return { code, fullSymbol: sym, description: h.name || sym, unitsPerLot: units, currentPrice: price, weightPercent: Number(h.weight) || 0 };
           });
 
+        /* Fetch actual client holdings from Supabase */
+        const symbols = rebIsins.map(i => i.fullSymbol).filter(Boolean);
+        if (symbols.length) {
+          try {
+            const { data: secRows } = await supabaseClient.from("securities").select("id, symbol").in("symbol", symbols);
+            const codeBySecId = {};
+            (secRows || []).forEach(s => { codeBySecId[s.id] = s.symbol.replace(/\.[A-Z]+$/, ""); });
+            const secIds = Object.keys(codeBySecId);
+            if (secIds.length) {
+              const { data: holdRows } = await supabaseClient.from("stock_holdings").select("security_id, user_id, quantity").in("security_id", secIds);
+              const userIds = [...new Set((holdRows || []).filter(r => r.user_id).map(r => String(r.user_id)))];
+              let nameById = {};
+              if (userIds.length) {
+                const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
+                nameById = (profRows || []).reduce((acc, p) => {
+                  acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
+                  return acc;
+                }, {});
+              }
+              (holdRows || []).forEach(r => {
+                if (!r.user_id || !r.security_id) return;
+                const code = codeBySecId[r.security_id];
+                if (!code) return;
+                if (!rebRawHoldings[code]) rebRawHoldings[code] = [];
+                const uid = String(r.user_id);
+                const existing = rebRawHoldings[code].find(x => x.userId === uid);
+                if (existing) { existing.quantity += Number(r.quantity) || 0; }
+                else { rebRawHoldings[code].push({ userId: uid, name: nameById[uid] || uid, quantity: Number(r.quantity) || 0 }); }
+              });
+            }
+          } catch (e) { console.warn("rebLoadStrategy: holdings fetch failed", e); }
+        }
+
         const metaEl = document.getElementById("rebCompositionMeta");
-        if (metaEl) metaEl.textContent = `${strategy.short_name || strategy.name} · ${rebTotalLots()} total lots · ${rebIsins.length} instruments`;
+        const totalClients = new Set(Object.values(rebRawHoldings).flatMap(arr => arr.map(x => x.userId))).size;
+        if (metaEl) metaEl.textContent = `${strategy.short_name || strategy.name} · ${totalClients} client${totalClients !== 1 ? "s" : ""} · ${rebIsins.length} instruments`;
         rebRenderAll();
       }
 
@@ -4879,7 +4896,6 @@
         rebRenderIsinsTable();
         rebRenderSteps();
         rebRenderImpact();
-        rebRenderClients();
         rebUpdateHeader();
       }
 
@@ -4887,21 +4903,22 @@
       function rebRenderIsinsTable() {
         const tbody = document.getElementById("rebIsinsBody");
         if (!tbody) return;
-        const totalLots = rebTotalLots();
         if (!rebIsins.length) {
           tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No holdings in this strategy</td></tr>';
           return;
         }
         tbody.innerHTML = rebIsins.map(isin => {
           const isSelected = rebSelectedIsin && rebSelectedIsin.code === isin.code;
-          const totalUnits = isin.unitsPerLot * totalLots;
+          const holders = rebRawHoldings[isin.code] || [];
+          const totalQty = holders.reduce((s, r) => s + r.quantity, 0);
+          const holderCount = holders.filter(r => r.quantity > 0).length;
           return `<tr data-isin="${isin.code}" class="cursor-pointer transition-colors ${isSelected ? "bg-violet-50" : "hover:bg-slate-50"}">
             <td class="px-4 py-2.5 font-mono font-semibold ${isSelected ? "text-violet-700" : "text-slate-800"}">${isin.code}</td>
             <td class="px-4 py-2.5 text-slate-700 max-w-[120px] truncate">${isin.description}</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-600">${isin.unitsPerLot}</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">${isin.weightPercent.toFixed(1)}%</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${isin.currentPrice > 0 ? isin.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2 }) : "—"}</td>
-            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-slate-800">${totalLots > 0 ? totalUnits.toLocaleString() : "—"}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-slate-800">${totalQty > 0 ? totalQty.toLocaleString() : "—"}<span class="text-slate-400 font-normal text-[10px] ml-1">${holderCount > 0 ? `${holderCount}c` : ""}</span></td>
           </tr>`;
         }).join("");
 
@@ -4967,9 +4984,10 @@
         });
 
         if (aggBar) {
-          if (rebSelectedStep && rebClients.length) {
-            const agg = rebComputeAggregateTrade(rebClients, rebSelectedStep.reductionUnits);
-            document.getElementById("rebAggregateText").textContent = `−${agg.totalSharesDelta.toLocaleString()} shares across ${agg.totalLots} lots`;
+          const clients = rebClientsForIsin(rebSelectedIsin);
+          if (rebSelectedStep && clients.length) {
+            const agg = rebComputeAggregateTrade(clients, rebSelectedStep.reductionUnits);
+            document.getElementById("rebAggregateText").textContent = `−${agg.totalSharesDelta.toLocaleString()} shares across ${agg.totalLots} lots (${clients.length} clients)`;
             aggBar.classList.remove("hidden");
           } else {
             aggBar.classList.add("hidden");
@@ -4983,15 +5001,16 @@
         const metaEl = document.getElementById("rebImpactMeta");
         if (!tbody) return;
 
-        if (!rebSelectedIsin || !rebSelectedStep || !rebClients.length) {
+        const clients = rebClientsForIsin(rebSelectedIsin);
+        if (!rebSelectedIsin || !rebSelectedStep || !clients.length) {
           tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">${
-            !rebClients.length ? "Add clients below to preview impact" : "Select instrument + reduction step"
+            !rebSelectedIsin ? "Select an instrument" : !clients.length ? "No clients hold this instrument" : "Select a reduction step"
           }</td></tr>`;
-          if (metaEl) metaEl.textContent = !rebClients.length ? "Add clients below" : "Select instrument + step";
+          if (metaEl) metaEl.textContent = !rebSelectedIsin ? "Select instrument + step" : !clients.length ? "No holders" : "Select reduction step";
           return;
         }
 
-        const impacts = rebComputeClientImpacts(rebClients, rebSelectedIsin.unitsPerLot, rebSelectedStep.newUnitsPerLot);
+        const impacts = rebComputeClientImpacts(clients, rebSelectedIsin.unitsPerLot, rebSelectedStep.newUnitsPerLot);
         const hasErrors = impacts.some(i => i.hasNegative);
         if (metaEl) metaEl.textContent = `${rebSelectedIsin.code} · ${impacts.length} clients${hasErrors ? " · ⚠ Negative holdings" : ""}`;
 
@@ -5010,53 +5029,21 @@
           </tr>`).join("");
       }
 
-      /* ── Client list ── */
-      function rebRenderClients() {
-        const grid = document.getElementById("rebClientsGrid");
-        if (!grid) return;
-        if (!rebClients.length) {
-          grid.innerHTML = '<p class="text-xs text-slate-400">No clients added yet. Click "Add Client" to start.</p>';
-          return;
-        }
-        grid.innerHTML = rebClients.map((c, idx) => `
-          <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-            <div class="min-w-0">
-              <p class="text-xs font-semibold text-slate-800 truncate max-w-[120px]">${c.name}</p>
-              <p class="text-[10px] text-slate-400 font-mono">${c.id}</p>
-            </div>
-            <div class="flex items-center gap-1 ml-2">
-              <button type="button" data-reb-lot-dec="${idx}" class="w-5 h-5 rounded flex items-center justify-center bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs transition">−</button>
-              <span class="font-mono text-xs font-semibold text-slate-800 w-6 text-center">${c.lots}</span>
-              <button type="button" data-reb-lot-inc="${idx}" class="w-5 h-5 rounded flex items-center justify-center bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-xs transition">+</button>
-            </div>
-            <button type="button" data-reb-remove="${idx}" class="ml-1 text-slate-300 hover:text-red-400 transition text-xs">✕</button>
-          </div>`).join("");
-
-        grid.querySelectorAll("[data-reb-lot-inc]").forEach(btn => {
-          btn.addEventListener("click", () => { const i = Number(btn.dataset.rebLotInc); rebClients[i].lots++; rebRenderAll(); });
-        });
-        grid.querySelectorAll("[data-reb-lot-dec]").forEach(btn => {
-          btn.addEventListener("click", () => { const i = Number(btn.dataset.rebLotDec); if (rebClients[i].lots > 1) { rebClients[i].lots--; rebRenderAll(); } });
-        });
-        grid.querySelectorAll("[data-reb-remove]").forEach(btn => {
-          btn.addEventListener("click", () => { rebClients.splice(Number(btn.dataset.rebRemove), 1); rebRenderAll(); });
-        });
-      }
-
       /* ── Header state (commit btn + negative badge) ── */
       function rebUpdateHeader() {
         const commitBtn = document.getElementById("rebCommitBtn");
         const negBadge = document.getElementById("rebNegativeBadge");
         if (!commitBtn || !negBadge) return;
 
+        const clients = rebClientsForIsin(rebSelectedIsin);
         const hasStep = !!rebSelectedStep;
         let hasNeg = false;
-        if (rebSelectedIsin && rebSelectedStep && rebClients.length) {
-          const impacts = rebComputeClientImpacts(rebClients, rebSelectedIsin.unitsPerLot, rebSelectedStep.newUnitsPerLot);
+        if (rebSelectedIsin && rebSelectedStep && clients.length) {
+          const impacts = rebComputeClientImpacts(clients, rebSelectedIsin.unitsPerLot, rebSelectedStep.newUnitsPerLot);
           hasNeg = impacts.some(i => i.hasNegative);
         }
 
-        if (hasStep && !hasNeg && rebClients.length && rebSelectedIsin) {
+        if (hasStep && !hasNeg && clients.length && rebSelectedIsin) {
           commitBtn.classList.remove("hidden");
         } else {
           commitBtn.classList.add("hidden");
@@ -5074,7 +5061,8 @@
       /* ── Sell Modal ── */
       function rebShowSellModal() {
         if (!rebSelectedIsin || !rebSelectedStep) return;
-        const totalLots = rebTotalLots();
+        const clients = rebClientsForIsin(rebSelectedIsin);
+        const totalLots = clients.reduce((s, c) => s + c.lots, 0);
         const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots);
         const modal = document.getElementById("rebSellModal");
         const meta = document.getElementById("rebSellModalMeta");
@@ -5139,7 +5127,7 @@
               ${selectedBuyIsin ? (() => {
                 const isin = rebIsins.find(i => i.code === selectedBuyIsin);
                 if (!isin || isin.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
-                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, rebClients, applyBuffer);
+                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, rebClientsForIsin(rebSelectedIsin), applyBuffer);
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
                     ["Buffered Price", rebFmtZAR(exec.bufferedPrice), false],
@@ -5187,28 +5175,6 @@
         /* Commit button → sell modal */
         const commitBtn = document.getElementById("rebCommitBtn");
         if (commitBtn) commitBtn.addEventListener("click", rebShowSellModal);
-
-        /* Add client form */
-        const addClientBtn = document.getElementById("rebAddClientBtn");
-        const addClientForm = document.getElementById("rebAddClientForm");
-        if (addClientBtn && addClientForm) {
-          addClientBtn.addEventListener("click", () => addClientForm.classList.toggle("hidden"));
-        }
-        const clientSaveBtn = document.getElementById("rebClientSaveBtn");
-        if (clientSaveBtn) clientSaveBtn.addEventListener("click", () => {
-          const name = document.getElementById("rebClientName").value.trim();
-          const id = document.getElementById("rebClientId").value.trim();
-          const lots = parseInt(document.getElementById("rebClientLots").value, 10);
-          if (!name || !id || !lots || lots < 1) return;
-          rebClients.push({ id, name, lots });
-          document.getElementById("rebClientName").value = "";
-          document.getElementById("rebClientId").value = "";
-          document.getElementById("rebClientLots").value = "";
-          addClientForm.classList.add("hidden");
-          rebRenderAll();
-        });
-        const clientCancelBtn = document.getElementById("rebClientCancelBtn");
-        if (clientCancelBtn) clientCancelBtn.addEventListener("click", () => addClientForm.classList.add("hidden"));
 
         /* Sell modal buttons */
         const sellModal = document.getElementById("rebSellModal");
