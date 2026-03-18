@@ -5078,6 +5078,7 @@
       let rebBuySecuritiesCache = null;
       let rebBuySecuritiesPromise = null;
       let rebShowUnitPrice = false; // false = show total value by default
+      let rebSelectedStrategyId = null;
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5188,6 +5189,7 @@
         rebSelectedIsin = null;
         rebSelectedStep = null;
         rebRawHoldings = {};
+        rebSelectedStrategyId = strategyId ? String(strategyId) : null;
         const strategy = (allStrategiesFullData || []).find(s => String(s.id) === String(strategyId));
         if (!strategy) { rebIsins = []; rebRenderAll(); return; }
 
@@ -5647,6 +5649,7 @@
             </div>`;
 
           const buyCommitBtn = document.getElementById("rebBuyCommitBtn");
+          const buyResetBtn = document.getElementById("rebBuyResetBtn");
           if (buyCommitBtn) {
             const notEnoughCredits = !!selectedExec && Number(selectedExec.buyPerLot) === 0;
             if (notEnoughCredits) {
@@ -5657,6 +5660,31 @@
               buyCommitBtn.disabled = false;
               buyCommitBtn.textContent = "Commit Trade Sequence";
               buyCommitBtn.className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition";
+            }
+
+            if (buyResetBtn) {
+              if (notEnoughCredits) {
+                buyResetBtn.textContent = "Back";
+                buyResetBtn.dataset.mode = "back";
+              } else {
+                buyResetBtn.textContent = "Start Over";
+                buyResetBtn.dataset.mode = "start-over";
+              }
+            }
+
+            if (modal) {
+              modal._buySelection = selectedExec && selectedInstrument
+                ? {
+                    instrument: selectedInstrument,
+                    exec: selectedExec,
+                    strategyId: rebSelectedStrategyId,
+                  }
+                : null;
+              modal._onBack = () => {
+                selectedBuySecurityId = null;
+                searchTerm = "";
+                render();
+              };
             }
           }
 
@@ -5677,6 +5705,112 @@
         modal.classList.remove("hidden");
       }
 
+      async function rebPersistCommittedTradeSequence() {
+        const buyModal = document.getElementById("rebBuyModal");
+        const buySelection = buyModal?._buySelection;
+        if (!buySelection?.exec || !buySelection?.instrument) {
+          throw new Error("Please select an instrument to buy first.");
+        }
+        if (!rebSelectedIsin || !rebSelectedStep) {
+          throw new Error("Missing sell selection. Please restart the sequence.");
+        }
+        const strategyId = buySelection.strategyId || rebSelectedStrategyId;
+        if (!strategyId) {
+          throw new Error("Strategy context missing. Please reselect strategy.");
+        }
+
+        const clients = rebClientsForIsin(rebSelectedIsin);
+        if (!clients.length) {
+          throw new Error("No client holdings available for this instrument.");
+        }
+
+        const buyExec = buySelection.exec;
+        if (Number(buyExec.buyPerLot) <= 0) {
+          throw new Error("Not enough credits for purchase.");
+        }
+
+        const symbolsToResolve = [rebSelectedIsin.fullSymbol, buySelection.instrument.fullSymbol].filter(Boolean);
+        const { data: secRows, error: secErr } = await supabaseClient
+          .from("securities")
+          .select("id, symbol")
+          .in("symbol", symbolsToResolve);
+        if (secErr) throw new Error(secErr.message || "Failed to resolve security IDs.");
+
+        const secIdBySymbol = (secRows || []).reduce((acc, row) => {
+          acc[String(row.symbol)] = String(row.id);
+          return acc;
+        }, {});
+
+        const sellSecurityId = secIdBySymbol[rebSelectedIsin.fullSymbol] || null;
+        const buySecurityId = String(buySelection.instrument.id || secIdBySymbol[buySelection.instrument.fullSymbol] || "");
+        if (!sellSecurityId || !buySecurityId) {
+          throw new Error("Could not resolve sell/buy security IDs.");
+        }
+
+        const deltas = new Map();
+        const pushDelta = (userId, securityId, qtyDelta) => {
+          const key = `${userId}|${securityId}`;
+          deltas.set(key, (deltas.get(key) || 0) + Number(qtyDelta || 0));
+        };
+
+        clients.forEach((c) => {
+          const sellQty = Number(rebSelectedStep.reductionUnits || 0) * Number(c.lots || 0);
+          if (sellQty > 0) pushDelta(String(c.id), sellSecurityId, -sellQty);
+        });
+
+        (buyExec.clientAllocations || []).forEach((alloc) => {
+          const buyQty = Number(alloc.shares || 0);
+          if (buyQty > 0) pushDelta(String(alloc.clientId), buySecurityId, buyQty);
+        });
+
+        const userIds = [...new Set([...clients.map((c) => String(c.id)), ...(buyExec.clientAllocations || []).map((a) => String(a.clientId))])];
+        const securityIds = [...new Set([sellSecurityId, buySecurityId])];
+
+        const { data: existingRows, error: existingErr } = await supabaseClient
+          .from("stock_holdings")
+          .select("id, user_id, security_id, quantity")
+          .eq("strategy_id", strategyId)
+          .in("user_id", userIds)
+          .in("security_id", securityIds);
+        if (existingErr) throw new Error(existingErr.message || "Failed to load existing holdings.");
+
+        const rowByKey = {};
+        (existingRows || []).forEach((row) => {
+          const key = `${row.user_id}|${row.security_id}`;
+          if (!rowByKey[key]) rowByKey[key] = row;
+        });
+
+        const nowIso = new Date().toISOString();
+        for (const [key, delta] of deltas.entries()) {
+          if (!delta) continue;
+          const [userId, securityId] = key.split("|");
+          const existing = rowByKey[key];
+          if (existing) {
+            const currentQty = Number(existing.quantity || 0);
+            const nextQty = Math.max(0, currentQty + delta);
+            const { error: updateErr } = await supabaseClient
+              .from("stock_holdings")
+              .update({ quantity: nextQty, updated_at: nowIso })
+              .eq("id", existing.id);
+            if (updateErr) throw new Error(updateErr.message || "Failed to update holding row.");
+          } else if (delta > 0) {
+            const { error: insertErr } = await supabaseClient
+              .from("stock_holdings")
+              .insert({
+                user_id: userId,
+                security_id: securityId,
+                quantity: delta,
+                strategy_id: strategyId,
+                updated_at: nowIso,
+              });
+            if (insertErr) throw new Error(insertErr.message || "Failed to insert holding row.");
+          }
+        }
+
+        rebSelectedStrategyId = String(strategyId);
+        await rebLoadStrategy(strategyId);
+      }
+
       /* ── Wire up rebalancing event listeners (deferred) ── */
       window.addEventListener("DOMContentLoaded", () => {
         const rebPriceHeader = document.getElementById("rebPriceHeader");
@@ -5691,7 +5825,7 @@
         const stratSel = document.getElementById("rebStrategySelect");
         if (stratSel) stratSel.addEventListener("change", () => {
           if (stratSel.value) rebLoadStrategy(stratSel.value);
-          else { rebIsins = []; rebSelectedIsin = null; rebSelectedStep = null; rebRenderAll(); }
+          else { rebSelectedStrategyId = null; rebIsins = []; rebSelectedIsin = null; rebSelectedStep = null; rebRenderAll(); }
         });
 
         /* Commit button → sell modal */
@@ -5724,21 +5858,39 @@
         if (buyClose) buyClose.addEventListener("click", closeBuy);
         if (buyOverlay) buyOverlay.addEventListener("click", closeBuy);
         if (buyReset) buyReset.addEventListener("click", () => {
+          if (buyReset.dataset.mode === "back" && buyModal && typeof buyModal._onBack === "function") {
+            buyModal._onBack();
+            return;
+          }
           closeBuy();
           rebSelectedStep = null;
           rebRenderAll();
         });
-        if (buyCommit) buyCommit.addEventListener("click", () => {
-          closeBuy();
-          /* success toast */
-          const t = document.createElement("div");
-          t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#1e293b;color:#f8fafc;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
-          t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Trade sequence committed`;
-          document.body.appendChild(t);
-          setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 2800);
-          rebSelectedIsin = null;
-          rebSelectedStep = null;
-          rebRenderAll();
+        if (buyCommit) buyCommit.addEventListener("click", async () => {
+          const prevLabel = buyCommit.textContent;
+          buyCommit.disabled = true;
+          buyCommit.textContent = "Processing...";
+          try {
+            await rebPersistCommittedTradeSequence();
+            closeBuy();
+            const t = document.createElement("div");
+            t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#1e293b;color:#f8fafc;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
+            t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Trade sequence committed`;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 2800);
+            rebSelectedIsin = null;
+            rebSelectedStep = null;
+            rebRenderAll();
+          } catch (err) {
+            const t = document.createElement("div");
+            t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#7f1d1d;color:#fee2e2;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
+            t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg> ${String(err?.message || "Trade commit failed")}`;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 3600);
+          } finally {
+            buyCommit.disabled = false;
+            buyCommit.textContent = prevLabel || "Commit Trade Sequence";
+          }
         });
       });
     </script>
