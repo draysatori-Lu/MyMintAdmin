@@ -1010,7 +1010,7 @@
           <!-- BUY MODAL -->
           <div id="rebBuyModal" class="hidden fixed inset-0 z-[9000] flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/30" id="rebBuyOverlay"></div>
-            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl z-10">
+            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl z-10 max-h-[90vh] flex flex-col overflow-hidden">
               <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <p class="font-semibold text-slate-900 text-sm">Buy Execution</p>
@@ -1020,7 +1020,7 @@
                   <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
                 </button>
               </div>
-              <div id="rebBuyModalBody" class="px-6 py-5"></div>
+              <div id="rebBuyModalBody" class="px-6 py-5 overflow-y-auto flex-1 min-h-0"></div>
               <div class="px-6 py-4 border-t border-slate-100 flex gap-3">
                 <button id="rebBuyResetBtn" class="flex-1 py-2 rounded-xl text-sm font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 transition">Start Over</button>
                 <button id="rebBuyCommitBtn" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition">Commit Trade Sequence</button>
@@ -6413,10 +6413,11 @@
       async function rebReplaceStrategyHoldingAfterBuy({
         strategyId,
         soldIsin,
+        sellStep,
         buySelection,
         buyExec,
       }) {
-        if (!strategyId || !soldIsin?.fullSymbol || !buySelection?.instrument) return;
+        if (!strategyId || !soldIsin?.fullSymbol || !buySelection?.instrument || !sellStep) return;
 
         const strategy = (allStrategiesFullData || []).find((s) => String(s.id) === String(strategyId));
         if (!strategy || !Array.isArray(strategy.holdings) || !strategy.holdings.length) return;
@@ -6431,25 +6432,64 @@
           normalizeSymbol(String(soldIsin.code || "").trim()),
         ].filter(Boolean));
 
-        const nextHoldings = [];
-        let replaced = false;
-        (strategy.holdings || []).forEach((holding) => {
-          if (!replaced && rebSymbolMatchesHolding(holding, soldTargets)) {
-            const buyShares = Math.max(1, Number(buyExec?.buyPerLot || 0));
-            nextHoldings.push({
-              symbol: buyFullSymbol,
-              ticker: buyFullSymbol,
-              name: buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
-              shares: buyShares,
-              quantity: buyShares,
-            });
-            replaced = true;
-            return;
-          }
-          nextHoldings.push(holding);
+        const buyTargets = new Set([
+          buyFullSymbol,
+          normalizeSymbol(buyFullSymbol),
+          String(buySelection.instrument.code || "").trim(),
+          normalizeSymbol(String(buySelection.instrument.code || "").trim()),
+        ].filter(Boolean));
+
+        const nextHoldings = (strategy.holdings || []).map((h) => ({ ...h }));
+        let soldIndex = -1;
+        let buyIndex = -1;
+        nextHoldings.forEach((holding, idx) => {
+          if (soldIndex < 0 && rebSymbolMatchesHolding(holding, soldTargets)) soldIndex = idx;
+          if (buyIndex < 0 && rebSymbolMatchesHolding(holding, buyTargets)) buyIndex = idx;
         });
 
-        if (!replaced) return;
+        if (soldIndex < 0) return;
+
+        const buyShares = Math.max(1, Number(buyExec?.buyPerLot || 0));
+        const nextSoldShares = Math.max(0, Number(sellStep?.newUnitsPerLot || 0));
+        const isFullExit = nextSoldShares <= 0 || Number(sellStep?.reductionPercent || 0) >= 100;
+
+        if (isFullExit) {
+          nextHoldings.splice(soldIndex, 1);
+          if (buyIndex > soldIndex) buyIndex -= 1;
+          if (buyIndex === soldIndex) buyIndex = -1;
+        } else {
+          const soldHolding = nextHoldings[soldIndex] || {};
+          nextHoldings[soldIndex] = {
+            ...soldHolding,
+            symbol: soldHolding.symbol || soldIsin.fullSymbol,
+            ticker: soldHolding.ticker || soldHolding.symbol || soldIsin.fullSymbol,
+            name: soldHolding.name || soldIsin.description || soldIsin.code || soldIsin.fullSymbol,
+            shares: nextSoldShares,
+            quantity: nextSoldShares,
+          };
+        }
+
+        if (buyIndex >= 0) {
+          const existingBuy = nextHoldings[buyIndex] || {};
+          const currentBuyShares = Math.max(0, Number(existingBuy.shares || existingBuy.quantity || 0));
+          const updatedBuyShares = currentBuyShares + buyShares;
+          nextHoldings[buyIndex] = {
+            ...existingBuy,
+            symbol: existingBuy.symbol || buyFullSymbol,
+            ticker: existingBuy.ticker || existingBuy.symbol || buyFullSymbol,
+            name: existingBuy.name || buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
+            shares: updatedBuyShares,
+            quantity: updatedBuyShares,
+          };
+        } else {
+          nextHoldings.push({
+            symbol: buyFullSymbol,
+            ticker: buyFullSymbol,
+            name: buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
+            shares: buyShares,
+            quantity: buyShares,
+          });
+        }
 
         const { holdings, minInvestment } = await rebMergeAndRevalueStrategyHoldings(nextHoldings);
         const { error: strategyUpdateErr } = await supabaseClient
@@ -6542,6 +6582,7 @@
         await rebReplaceStrategyHoldingAfterBuy({
           strategyId,
           soldIsin: rebSelectedIsin,
+          sellStep: rebSelectedStep,
           buySelection,
           buyExec,
         });
