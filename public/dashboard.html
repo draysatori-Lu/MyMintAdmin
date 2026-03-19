@@ -598,6 +598,15 @@
 
           <!-- ═══════════════ STRATEGIES TAB ═══════════════ -->
           <div id="tabStrategiesPanel" class="hidden">
+            <!-- ── Investor filter bar ── -->
+            <div id="strategyInvestorFilterBar" class="flex items-center gap-1.5 px-1 pt-2 pb-0">
+              <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-0.5">Show:</span>
+              <button type="button" data-inv-filter="all"         class="inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors border-violet-600 bg-violet-600 text-white">All</button>
+              <button type="button" data-inv-filter="invested"    class="inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors border-slate-300 bg-white text-slate-500 hover:border-emerald-500 hover:text-emerald-600">Has investors</button>
+              <button type="button" data-inv-filter="not-invested" class="inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors border-slate-300 bg-white text-slate-500 hover:border-amber-400 hover:text-amber-600">No investors</button>
+              <span id="invFilterCount" class="ml-1 text-[10px] text-slate-400"></span>
+            </div>
+
             <!-- ── STRATEGY SHEET TABS (spreadsheet-style) ── -->
             <div
               class="flex items-end gap-0 overflow-x-auto"
@@ -1167,6 +1176,8 @@
       let activeStrategyTabId = null;
       let globalSecuritiesMap = new Map();
       let strategyWorkspaceVisible = false;
+      let strategyInvestorFilter = "all";   // "all" | "invested" | "not-invested"
+      let strategyInvestedIds = new Set();  // strategy IDs that have ≥1 real investor
 
       const setStrategyWorkspaceVisible = (visible) => {
         strategyWorkspaceVisible = visible;
@@ -1366,6 +1377,15 @@
       tabRebalancing.addEventListener("click", () => {
         switchTab(tabRebalancing);
         rebInitStrategySelector();
+      });
+
+      /* ── Investor filter pills ── */
+      document.querySelectorAll(".inv-filter-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          strategyInvestorFilter = btn.dataset.invFilter || "all";
+          applyInvFilterPillStyles();
+          renderStrategyTabs();
+        });
       });
 
       /* ─────────────────────── OVERVIEW TAB LOGIC ─────────────────────── */
@@ -3348,6 +3368,7 @@
         allStrategiesData = strategies;
         allStrategiesFullData = strategies;
         renderTopAssetsRow(); // re-rank cards now that strategy usage counts are known
+        loadStrategyInvestorData(); // async: determines which strategies have real investors
 
         // Build live securities price map for overview min investment display
         const _allSyms = [
@@ -4155,6 +4176,83 @@
         await loadStrategies();
       };
 
+      /* ── Load which strategies have real investors ── */
+      const loadStrategyInvestorData = async () => {
+        strategyInvestedIds = new Set();
+        const strategies = allStrategiesFullData || [];
+        if (!strategies.length) return;
+
+        /* Collect all unique symbols from all strategies */
+        const allSymbols = [
+          ...new Set(
+            strategies.flatMap(s => {
+              const h = Array.isArray(s.holdings) ? s.holdings : [];
+              return h.map(hld => hld.symbol || hld.ticker || "").filter(Boolean);
+            }),
+          ),
+        ];
+        if (!allSymbols.length) return;
+
+        try {
+          /* symbol → security_id */
+          const { data: secRows } = await supabaseClient.from("securities").select("id, symbol").in("symbol", allSymbols);
+          const secIdBySymbol = {};
+          (secRows || []).forEach(s => { secIdBySymbol[s.symbol] = s.id; });
+
+          const secIds = Object.values(secIdBySymbol).filter(Boolean);
+          if (!secIds.length) return;
+
+          /* Which security IDs have any holder with quantity > 0 */
+          const { data: holdRows } = await supabaseClient
+            .from("stock_holdings")
+            .select("security_id")
+            .in("security_id", secIds)
+            .gt("quantity", 0);
+
+          const investedSecIds = new Set((holdRows || []).map(r => r.security_id));
+
+          /* Map invested securities back to strategies */
+          strategies.forEach(s => {
+            const holdings = Array.isArray(s.holdings) ? s.holdings : [];
+            const hasInvestor = holdings.some(hld => {
+              const sym = hld.symbol || hld.ticker || "";
+              const sid = secIdBySymbol[sym];
+              return sid && investedSecIds.has(sid);
+            });
+            if (hasInvestor) strategyInvestedIds.add(String(s.id));
+          });
+        } catch (e) {
+          console.warn("loadStrategyInvestorData failed:", e);
+        }
+
+        /* Update pill count display */
+        const countEl = document.getElementById("invFilterCount");
+        if (countEl) {
+          const visible = strategyInvestorFilter === "invested"
+            ? strategyInvestedIds.size
+            : strategyInvestorFilter === "not-invested"
+              ? strategies.length - strategyInvestedIds.size
+              : strategies.length;
+          countEl.textContent = `${visible} shown`;
+        }
+        renderStrategyTabs();
+      };
+
+      /* ── Helper: apply investor filter pill active styles ── */
+      const applyInvFilterPillStyles = () => {
+        document.querySelectorAll(".inv-filter-pill").forEach(btn => {
+          const v = btn.dataset.invFilter;
+          const isActive = v === strategyInvestorFilter;
+          if (v === "all") {
+            btn.className = `inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors ${isActive ? "border-violet-600 bg-violet-600 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-violet-500 hover:text-violet-600"}`;
+          } else if (v === "invested") {
+            btn.className = `inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors ${isActive ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-emerald-500 hover:text-emerald-600"}`;
+          } else {
+            btn.className = `inv-filter-pill px-2.5 py-0.5 rounded-full text-xs font-semibold border transition-colors ${isActive ? "border-amber-400 bg-amber-400 text-white" : "border-slate-300 bg-white text-slate-500 hover:border-amber-400 hover:text-amber-600"}`;
+          }
+        });
+      };
+
       const renderStrategyTabs = () => {
         const tabsList = document.getElementById("strategyTabsList");
         if (!tabsList) return;
@@ -4164,7 +4262,20 @@
         if (existingDraft && !activeStrategyTabId) {
           tabsList.insertBefore(existingDraft, tabsList.firstChild);
         }
-        (allStrategiesFullData || []).forEach((strategy) => {
+
+        /* Apply investor filter */
+        let filteredStrategies = (allStrategiesFullData || []);
+        if (strategyInvestorFilter === "invested") {
+          filteredStrategies = filteredStrategies.filter(s => strategyInvestedIds.has(String(s.id)));
+        } else if (strategyInvestorFilter === "not-invested") {
+          filteredStrategies = filteredStrategies.filter(s => !strategyInvestedIds.has(String(s.id)));
+        }
+
+        /* Update count chip */
+        const countEl = document.getElementById("invFilterCount");
+        if (countEl) countEl.textContent = `${filteredStrategies.length} shown`;
+
+        filteredStrategies.forEach((strategy) => {
           const isActive = strategy.id === activeStrategyTabId;
           const wrap = document.createElement("div");
           wrap.style.cssText = `position:relative;display:flex;align-items:flex-end;`;
