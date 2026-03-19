@@ -548,6 +548,51 @@
       vertical-align: middle;
     }
 
+    .strategy-name-badge {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #5b21b6;
+      background: #ede9fe;
+      border: 1px solid #c4b5fd;
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .side-badge {
+      display: inline-block;
+      min-width: 52px;
+      text-align: center;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+    }
+
+    .side-badge-buy {
+      color: #166534;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+
+    .side-badge-sell {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+
+    .side-badge-neutral {
+      color: #475569;
+      background: #e2e8f0;
+      border-color: #cbd5e1;
+    }
+
     .orderbook-empty {
       border: 1px dashed #d1d5db;
       border-radius: 14px;
@@ -3512,6 +3557,17 @@
       }
 
       orderbookTableBody.innerHTML = rows.map((row) => {
+        const sideValue = String(row.side || '-').toUpperCase();
+        const sideClass = sideValue === 'BUY'
+          ? 'side-badge-buy'
+          : sideValue === 'SELL'
+            ? 'side-badge-sell'
+            : 'side-badge-neutral';
+        const strategyTag = row.isStrategy
+          ? '<span class="strategy-badge">Strategy</span>'
+          : row.strategyId
+            ? `<span class="strategy-name-badge">${escapeHtml(row.strategyShortName || row.strategyName || 'Strategy')}</span>`
+            : '';
         const settlementOptions = (row.settlementAccountOptions || []).map((option) => {
           const isSelected = option === row.settlementAccount ? ' selected' : '';
           return `<option value="${escapeHtml(option)}"${isSelected}>${escapeHtml(option)}</option>`;
@@ -3525,9 +3581,9 @@
         return `
           <tr class="orderbook-main-row" data-orderbook-main-row data-line-key="${lineKey}">
             <td>${escapeHtml(String(row.line ?? '-'))}</td>
-            <td>${escapeHtml(row.instrumentName || '-')}${row.isStrategy ? ' <span class="strategy-badge">Strategy</span>' : ''}</td>
+            <td>${escapeHtml(row.instrumentName || '-')}${strategyTag}</td>
             <td class="orderbook-cell-muted">${escapeHtml(row.ticker || '-')}</td>
-            <td>${escapeHtml(row.side || '-')}</td>
+            <td><span class="side-badge ${sideClass}">${escapeHtml(sideValue || '-')}</span></td>
             <td>${escapeHtml(String(row.totalQuantity ?? '-'))}</td>
             <td>${escapeHtml(asRandValue(row.avgFill))}</td>
             <td>${escapeHtml(asRandValue(row.marketValue))}</td>
@@ -3566,6 +3622,8 @@
         return String(row.instrumentName || '').toLowerCase().includes(query)
           || String(row.ticker || '').toLowerCase().includes(query)
           || String(row.side || '').toLowerCase().includes(query)
+          || String(row.strategyName || '').toLowerCase().includes(query)
+          || String(row.strategyShortName || '').toLowerCase().includes(query)
           || String(row.marketValue || '').toLowerCase().includes(query)
           || String(row.orderType || '').toLowerCase().includes(query)
           || String(row.settlementAccount || '').toLowerCase().includes(query)

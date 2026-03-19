@@ -5705,6 +5705,167 @@
         modal.classList.remove("hidden");
       }
 
+      const rebSymbolMatchesHolding = (holding, targets) => {
+        if (!holding) return false;
+        const raw = String(holding.symbol || holding.ticker || "").trim();
+        if (!raw) return false;
+        const normalized = normalizeSymbol(raw);
+        return targets.has(raw) || targets.has(normalized);
+      };
+
+      const rebMergeAndRevalueStrategyHoldings = async (holdings) => {
+        const mergedBySymbol = new Map();
+        (holdings || []).forEach((holding) => {
+          const rawSymbol = String(holding?.symbol || holding?.ticker || "").trim();
+          if (!rawSymbol) return;
+          const key = normalizeSymbol(rawSymbol) || rawSymbol;
+          if (!mergedBySymbol.has(key)) {
+            mergedBySymbol.set(key, {
+              symbol: rawSymbol,
+              ticker: rawSymbol,
+              name: String(holding?.name || rawSymbol),
+              shares: 0,
+            });
+          }
+          const entry = mergedBySymbol.get(key);
+          entry.shares += Math.max(0, Number(holding?.shares || holding?.quantity || 0));
+          if (!entry.name && holding?.name) entry.name = String(holding.name);
+        });
+
+        const merged = [...mergedBySymbol.values()].filter((h) => h.shares > 0);
+        if (!merged.length) return { holdings: [], minInvestment: null };
+
+        const symbols = merged.map((h) => h.symbol).filter(Boolean);
+        const priceBySymbol = new Map();
+        const nameBySymbol = new Map();
+        if (symbols.length) {
+          const { data: secRows, error: secErr } = await supabaseClient
+            .from("securities")
+            .select("symbol, name, last_price")
+            .in("symbol", symbols);
+          if (secErr) throw new Error(secErr.message || "Failed to load latest security prices.");
+          (secRows || []).forEach((row) => {
+            const symbol = String(row.symbol || "");
+            const norm = normalizeSymbol(symbol);
+            const price = Number(row.last_price || 0) / 100;
+            if (symbol) {
+              priceBySymbol.set(symbol, Number.isFinite(price) ? price : 0);
+              if (row.name) nameBySymbol.set(symbol, String(row.name));
+            }
+            if (norm) {
+              if (!priceBySymbol.has(norm)) priceBySymbol.set(norm, Number.isFinite(price) ? price : 0);
+              if (row.name && !nameBySymbol.has(norm)) nameBySymbol.set(norm, String(row.name));
+            }
+          });
+        }
+
+        const valued = merged.map((holding) => {
+          const norm = normalizeSymbol(holding.symbol);
+          const shares = Math.max(0, Number(holding.shares || 0));
+          const price = priceBySymbol.get(holding.symbol) ?? priceBySymbol.get(norm) ?? 0;
+          const marketValue = shares * (Number.isFinite(price) ? price : 0);
+          const fallbackBasis = shares;
+          return {
+            symbol: holding.symbol,
+            ticker: holding.symbol,
+            name: nameBySymbol.get(holding.symbol) || nameBySymbol.get(norm) || holding.name || holding.symbol,
+            shares,
+            quantity: shares,
+            marketValue,
+            basis: marketValue > 0 ? marketValue : fallbackBasis,
+          };
+        });
+
+        const totalMarketValue = valued.reduce((sum, h) => sum + h.marketValue, 0);
+        const totalBasis = valued.reduce((sum, h) => sum + h.basis, 0);
+
+        const holdingsPayload = valued.map((holding) => ({
+          symbol: holding.symbol,
+          ticker: holding.ticker,
+          name: holding.name,
+          shares: holding.shares,
+          quantity: holding.quantity,
+          weight: totalBasis > 0 ? Number(((holding.basis / totalBasis) * 100).toFixed(2)) : 0,
+        }));
+
+        return {
+          holdings: holdingsPayload,
+          minInvestment: totalMarketValue > 0 ? Math.round(totalMarketValue) : null,
+        };
+      };
+
+      async function rebReplaceStrategyHoldingAfterBuy({
+        strategyId,
+        soldIsin,
+        buySelection,
+        buyExec,
+      }) {
+        if (!strategyId || !soldIsin?.fullSymbol || !buySelection?.instrument) return;
+
+        const strategy = (allStrategiesFullData || []).find((s) => String(s.id) === String(strategyId));
+        if (!strategy || !Array.isArray(strategy.holdings) || !strategy.holdings.length) return;
+
+        const buyFullSymbol = String(buySelection.instrument.fullSymbol || "").trim();
+        if (!buyFullSymbol) return;
+
+        const soldTargets = new Set([
+          String(soldIsin.fullSymbol || "").trim(),
+          normalizeSymbol(String(soldIsin.fullSymbol || "").trim()),
+          String(soldIsin.code || "").trim(),
+          normalizeSymbol(String(soldIsin.code || "").trim()),
+        ].filter(Boolean));
+
+        const nextHoldings = [];
+        let replaced = false;
+        (strategy.holdings || []).forEach((holding) => {
+          if (!replaced && rebSymbolMatchesHolding(holding, soldTargets)) {
+            const buyShares = Math.max(1, Number(buyExec?.buyPerLot || 0));
+            nextHoldings.push({
+              symbol: buyFullSymbol,
+              ticker: buyFullSymbol,
+              name: buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
+              shares: buyShares,
+              quantity: buyShares,
+            });
+            replaced = true;
+            return;
+          }
+          nextHoldings.push(holding);
+        });
+
+        if (!replaced) return;
+
+        const { holdings, minInvestment } = await rebMergeAndRevalueStrategyHoldings(nextHoldings);
+        const { error: strategyUpdateErr } = await supabaseClient
+          .from("strategies")
+          .update({
+            holdings: holdings.length ? holdings : null,
+            min_investment: minInvestment,
+          })
+          .eq("id", strategyId);
+
+        if (strategyUpdateErr) {
+          throw new Error(strategyUpdateErr.message || "Failed to update strategy holdings.");
+        }
+
+        allStrategiesFullData = (allStrategiesFullData || []).map((item) => {
+          if (String(item.id) !== String(strategyId)) return item;
+          return {
+            ...item,
+            holdings,
+            min_investment: minInvestment,
+          };
+        });
+        allStrategiesData = (allStrategiesData || []).map((item) => {
+          if (String(item.id) !== String(strategyId)) return item;
+          return {
+            ...item,
+            holdings,
+            min_investment: minInvestment,
+          };
+        });
+      }
+
       async function rebPersistCommittedTradeSequence() {
         const buyModal = document.getElementById("rebBuyModal");
         const buySelection = buyModal?._buySelection;
@@ -5747,16 +5908,18 @@
           throw new Error("Could not resolve sell/buy security IDs.");
         }
 
+        await rebReplaceStrategyHoldingAfterBuy({
+          strategyId,
+          soldIsin: rebSelectedIsin,
+          buySelection,
+          buyExec,
+        });
+
         const deltas = new Map();
         const pushDelta = (userId, securityId, qtyDelta) => {
           const key = `${userId}|${securityId}`;
           deltas.set(key, (deltas.get(key) || 0) + Number(qtyDelta || 0));
         };
-
-        clients.forEach((c) => {
-          const sellQty = Number(rebSelectedStep.reductionUnits || 0) * Number(c.lots || 0);
-          if (sellQty > 0) pushDelta(String(c.id), sellSecurityId, -sellQty);
-        });
 
         (buyExec.clientAllocations || []).forEach((alloc) => {
           const buyQty = Number(alloc.shares || 0);
@@ -5774,8 +5937,19 @@
           .in("security_id", securityIds);
         if (existingErr) throw new Error(existingErr.message || "Failed to load existing holdings.");
 
+        // Replacement mode: once a different instrument is bought, fully remove
+        // the sold instrument rows from this strategy for impacted users.
+        const { error: sellDeleteErr } = await supabaseClient
+          .from("stock_holdings")
+          .delete()
+          .eq("strategy_id", strategyId)
+          .eq("security_id", sellSecurityId)
+          .in("user_id", userIds);
+        if (sellDeleteErr) throw new Error(sellDeleteErr.message || "Failed to remove sold instrument holdings.");
+
         const rowByKey = {};
         (existingRows || []).forEach((row) => {
+          if (String(row.security_id) === String(sellSecurityId)) return;
           const key = `${row.user_id}|${row.security_id}`;
           if (!rowByKey[key]) rowByKey[key] = row;
         });
