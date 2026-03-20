@@ -219,6 +219,34 @@
         width: 6px;
       }
 
+      .reb-composition-card {
+        position: relative;
+      }
+
+      .reb-composition-accent {
+        height: 4px;
+        background: linear-gradient(90deg, #c4b5fd 0%, #8b5cf6 50%, #c4b5fd 100%);
+      }
+
+      .reb-composition-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #8b5cf6 #ede9fe;
+      }
+
+      .reb-composition-scroll::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .reb-composition-scroll::-webkit-scrollbar-track {
+        background: #ede9fe;
+        border-radius: 999px;
+      }
+
+      .reb-composition-scroll::-webkit-scrollbar-thumb {
+        background: #8b5cf6;
+        border-radius: 999px;
+      }
+
       .holdings-list::-webkit-scrollbar-thumb {
         background: #cbd5e1;
         border-radius: 999px;
@@ -872,12 +900,13 @@
             <!-- Three-pane workspace -->
             <div class="flex gap-4" style="height:520px">
               <!-- LEFT: ISINs / Holdings (40%) -->
-              <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden" style="width:42%">
+              <div class="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden reb-composition-card" style="width:42%">
+                <div class="reb-composition-accent"></div>
                 <div class="px-5 py-3 border-b border-slate-100 shrink-0">
                   <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Strategy Composition</p>
                   <p id="rebCompositionMeta" class="text-xs text-slate-400 mt-0.5">Select a strategy to begin</p>
                 </div>
-                <div class="flex-1 overflow-auto">
+                <div class="flex-1 overflow-auto reb-composition-scroll">
                   <table class="w-full text-xs" id="rebIsinsTable">
                     <thead class="sticky top-0 bg-white z-10 border-b border-slate-100">
                       <tr class="text-slate-400 font-medium">
@@ -885,7 +914,7 @@
                         <th class="text-left px-4 py-2">Name</th>
                         <th class="text-right px-4 py-2">Units/Lot</th>
                         <th class="text-right px-4 py-2">Weight</th>
-                        <th class="text-right px-4 py-2">Price (R)</th>
+                        <th id="rebPriceHeader" class="text-right px-4 py-2 cursor-pointer select-none" title="Click to toggle total/unit price">Price (R)</th>
                         <th class="text-right px-4 py-2">Total Units</th>
                       </tr>
                     </thead>
@@ -927,6 +956,10 @@
                       <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Client Impact Preview</p>
                       <p id="rebImpactMeta" class="text-xs text-slate-400 mt-0.5">Select instrument + step</p>
                     </div>
+                    <label class="inline-flex items-center gap-2 text-[11px] text-slate-500 font-semibold uppercase tracking-wider cursor-pointer select-none">
+                      <span>Show Residual View</span>
+                      <input id="rebImpactChangeToggle" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-400" />
+                    </label>
                   </div>
                   <div class="flex-1 overflow-auto">
                     <table class="w-full text-xs">
@@ -943,6 +976,9 @@
                         <tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">No impact data yet</td></tr>
                       </tbody>
                     </table>
+                  </div>
+                  <div class="px-5 py-3 border-t border-slate-100 bg-white">
+                    <button id="rebUseResidualBtn" class="hidden w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition shadow-sm">Use Residual</button>
                   </div>
                 </div>
               </div>
@@ -974,7 +1010,7 @@
           <!-- BUY MODAL -->
           <div id="rebBuyModal" class="hidden fixed inset-0 z-[9000] flex items-center justify-center p-4">
             <div class="absolute inset-0 bg-black/30" id="rebBuyOverlay"></div>
-            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg z-10">
+            <div class="relative bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl z-10 max-h-[90vh] flex flex-col overflow-hidden">
               <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <p class="font-semibold text-slate-900 text-sm">Buy Execution</p>
@@ -984,7 +1020,7 @@
                   <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
                 </button>
               </div>
-              <div id="rebBuyModalBody" class="px-6 py-5"></div>
+              <div id="rebBuyModalBody" class="px-6 py-5 overflow-y-auto flex-1 min-h-0"></div>
               <div class="px-6 py-4 border-t border-slate-100 flex gap-3">
                 <button id="rebBuyResetBtn" class="flex-1 py-2 rounded-xl text-sm font-medium text-slate-500 bg-slate-100 hover:bg-slate-200 transition">Start Over</button>
                 <button id="rebBuyCommitBtn" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition">Commit Trade Sequence</button>
@@ -3627,7 +3663,9 @@
         const { data: holdingsRows, error: holdingsError } =
           await supabaseClient
             .from("stock_holdings")
-            .select("security_id, user_id, quantity");
+            .select("security_id, user_id, quantity")
+            .eq("is_active", true)
+            .eq("trade_side", "BUY");
         if (holdingsError) {
           console.error("Holdings load error:", holdingsError);
           renderHoldings([]);
@@ -4978,6 +5016,7 @@
       /* ── Constants ── */
       const REB_BROKERAGE_RATE = 0.005; // 0.5%
       const REB_OFF_CUSTODY_FEE = 69;   // R69
+      const REB_WALLET_TABLE = "strategy_client_wallet_credits";
 
       /* ── Engine functions ── */
       function rebGetDivisors(n) {
@@ -5014,29 +5053,350 @@
         return { totalSharesDelta: reductionPerLot * totalLots, totalLots, deltaPerLot: reductionPerLot };
       }
 
-      function rebComputeSellExecution(isin, reductionPerLot, totalLots) {
+      function rebComputeSellExecution(isin, reductionPerLot, totalLots, affectedClientCount) {
         const totalShares = reductionPerLot * totalLots;
         const grossProceeds = totalShares * isin.currentPrice;
         const brokerage = grossProceeds * REB_BROKERAGE_RATE;
-        const netProceeds = grossProceeds - brokerage - REB_OFF_CUSTODY_FEE;
-        return { isinCode: isin.code, isinDescription: isin.description, totalShares, pricePerShare: isin.currentPrice, grossProceeds, brokerage, offCustodyFee: REB_OFF_CUSTODY_FEE, netProceeds };
+        const offCustodyFeeMultiplier = Math.max(1, Number(affectedClientCount) || 1);
+        const offCustodyFee = REB_OFF_CUSTODY_FEE * offCustodyFeeMultiplier;
+        const netProceeds = grossProceeds - brokerage - offCustodyFee;
+        return { isinCode: isin.code, isinDescription: isin.description, totalShares, pricePerShare: isin.currentPrice, grossProceeds, brokerage, offCustodyFee, offCustodyFeeMultiplier, netProceeds };
       }
 
       function rebComputeBuyExecution(isinCode, isinDescription, pricePerShare, netCapital, clients, applyBuffer) {
         const totalLots = clients.reduce((s, c) => s + c.lots, 0);
         const bufferedPrice = applyBuffer ? pricePerShare * 1.08 : pricePerShare;
-        const buyPerLot = Math.floor(netCapital / (totalLots * bufferedPrice));
-        const totalShares = buyPerLot * totalLots;
-        const grossCost = totalShares * pricePerShare;
-        const brokerage = grossCost * REB_BROKERAGE_RATE;
-        const totalCost = grossCost + brokerage + REB_OFF_CUSTODY_FEE;
-        const residualCash = netCapital - totalCost;
-        const clientAllocations = clients.map(c => {
-          const shares = buyPerLot * c.lots;
-          const clientResidual = (c.lots / totalLots) * residualCash;
-          return { clientId: c.id, clientName: c.name, lots: c.lots, shares, residualCash: clientResidual };
+        const affectedClientCount = Math.max(1, clients.filter((c) => Number(c.lots) > 0).length);
+        const custodyFee = REB_OFF_CUSTODY_FEE * affectedClientCount;
+        const perShareTradingCost = bufferedPrice * (1 + REB_BROKERAGE_RATE);
+        const affordableCapitalAfterFees = Math.max(0, Number(netCapital || 0) - custodyFee);
+        const buyPerLot = (totalLots > 0 && perShareTradingCost > 0)
+          ? Math.max(0, Math.floor(affordableCapitalAfterFees / (totalLots * perShareTradingCost)))
+          : 0;
+
+        const baseClientAllocations = clients.map((c) => ({
+          clientId: c.id,
+          clientName: c.name,
+          lots: c.lots,
+          shares: buyPerLot * c.lots,
+          extraShares: 0,
+        }));
+
+        const baseTotalShares = baseClientAllocations.reduce((sum, c) => sum + c.shares, 0);
+        const baseGrossCost = baseTotalShares * bufferedPrice;
+        const baseBrokerage = baseGrossCost * REB_BROKERAGE_RATE;
+        const baseAppliedCustodyFee = baseTotalShares > 0 ? custodyFee : 0;
+        const baseTotalCost = baseGrossCost + baseBrokerage + baseAppliedCustodyFee;
+        const remainingBudgetAfterBase = Math.max(0, netCapital - baseTotalCost);
+        const maxExtraShares = perShareTradingCost > 0
+          ? Math.floor(remainingBudgetAfterBase / perShareTradingCost)
+          : 0;
+
+        // Allocate extra shares by lot weight so client proportions remain aligned.
+        if (maxExtraShares > 0 && totalLots > 0) {
+          const weighted = baseClientAllocations.map((alloc) => {
+            const weight = alloc.lots / totalLots;
+            const targetExtra = maxExtraShares * weight;
+            return {
+              alloc,
+              floorExtra: Math.floor(targetExtra),
+              remainder: targetExtra - Math.floor(targetExtra),
+            };
+          });
+
+          let assigned = 0;
+          weighted.forEach((w) => {
+            w.alloc.extraShares = w.floorExtra;
+            assigned += w.floorExtra;
+          });
+
+          let remaining = maxExtraShares - assigned;
+          weighted
+            .sort((a, b) => {
+              if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+              return String(a.alloc.clientId).localeCompare(String(b.alloc.clientId));
+            })
+            .forEach((w) => {
+              if (remaining <= 0) return;
+              w.alloc.extraShares += 1;
+              remaining -= 1;
+            });
+        }
+
+        const clientAllocations = baseClientAllocations.map((alloc) => {
+          const shares = alloc.shares + alloc.extraShares;
+          return {
+            clientId: alloc.clientId,
+            clientName: alloc.clientName,
+            lots: alloc.lots,
+            shares,
+            extraShares: alloc.extraShares,
+            residualCash: 0,
+          };
         });
-        return { isinCode, isinDescription, pricePerShare, bufferedPrice, buyPerLot, totalShares, grossCost, brokerage, custodyFee: REB_OFF_CUSTODY_FEE, totalCost, residualCash, clientAllocations };
+
+        const totalShares = clientAllocations.reduce((sum, c) => sum + c.shares, 0);
+        const grossCost = totalShares * bufferedPrice;
+        const brokerage = grossCost * REB_BROKERAGE_RATE;
+        const appliedCustodyFee = totalShares > 0 ? custodyFee : 0;
+        const totalCost = grossCost + brokerage + appliedCustodyFee;
+        const residualCash = Math.max(0, netCapital - totalCost);
+
+        clientAllocations.forEach((alloc) => {
+          const clientResidual = totalLots > 0 ? (alloc.lots / totalLots) * residualCash : 0;
+          alloc.residualCash = clientResidual;
+        });
+
+        const extraSharesDistributed = clientAllocations.reduce((sum, c) => sum + c.extraShares, 0);
+
+        return {
+          isinCode,
+          isinDescription,
+          pricePerShare,
+          bufferedPrice,
+          buyPerLot,
+          totalShares,
+          grossCost,
+          brokerage,
+          custodyFee: appliedCustodyFee,
+          custodyFeeMultiplier: affectedClientCount,
+          totalCost,
+          residualCash,
+          extraSharesDistributed,
+          clientAllocations,
+        };
+      }
+
+      function rebRoundMoney(value) {
+        return Number(Number(value || 0).toFixed(2));
+      }
+
+      function rebDistributeMoneyByLots(totalAmount, clients) {
+        const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+        const totalCents = Math.max(0, Math.round(Number(totalAmount || 0) * 100));
+        if (!totalLots || !totalCents) {
+          return clients.reduce((acc, c) => {
+            acc[String(c.id)] = 0;
+            return acc;
+          }, {});
+        }
+
+        const weighted = clients.map((c) => {
+          const userId = String(c.id);
+          const lotWeight = (Number(c.lots) || 0) / totalLots;
+          const exactCents = totalCents * lotWeight;
+          const floorCents = Math.floor(exactCents);
+          return {
+            userId,
+            floorCents,
+            remainder: exactCents - floorCents,
+          };
+        });
+
+        let assigned = weighted.reduce((sum, item) => sum + item.floorCents, 0);
+        let remaining = totalCents - assigned;
+        weighted
+          .sort((a, b) => {
+            if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+            return a.userId.localeCompare(b.userId);
+          })
+          .forEach((item) => {
+            if (remaining <= 0) return;
+            item.floorCents += 1;
+            remaining -= 1;
+          });
+
+        return weighted.reduce((acc, item) => {
+          acc[item.userId] = item.floorCents / 100;
+          return acc;
+        }, {});
+      }
+
+      function rebComputeWalletFundedBuyExecution({ instrument, clients, capitalByClient, applyBuffer }) {
+        const pricePerShare = Number(instrument?.currentPrice || 0);
+        if (!instrument || pricePerShare <= 0 || !Array.isArray(clients) || !clients.length) {
+          return null;
+        }
+
+        const clientBudgets = clients.map((c) => {
+          const userId = String(c.id);
+          const budget = Math.max(0, Number(capitalByClient?.[userId] || 0));
+          return {
+            clientId: userId,
+            clientName: c.name,
+            lots: Number(c.lots) || 0,
+            budget,
+            shares: 0,
+          };
+        });
+
+        const totalCapital = clientBudgets.reduce((sum, c) => sum + c.budget, 0);
+        const bufferedPrice = applyBuffer ? pricePerShare * 1.08 : pricePerShare;
+        const perShareBufferedCost = bufferedPrice * (1 + REB_BROKERAGE_RATE);
+        const affectedClientCount = Math.max(1, clientBudgets.filter((c) => c.budget > 0).length);
+        const custodyFee = REB_OFF_CUSTODY_FEE * affectedClientCount;
+        if (totalCapital <= custodyFee || perShareBufferedCost <= 0) {
+          return {
+            isinCode: instrument.code,
+            isinDescription: instrument.description,
+            pricePerShare,
+            bufferedPrice,
+            totalCapital,
+            totalShares: 0,
+            grossCost: 0,
+            brokerage: 0,
+            custodyFee: 0,
+            custodyFeeMultiplier: affectedClientCount,
+            totalCost: 0,
+            residualCash: totalCapital,
+            clientAllocations: clientBudgets.map((c) => ({
+              clientId: c.clientId,
+              clientName: c.clientName,
+              lots: c.lots,
+              shares: 0,
+              spent: 0,
+              remainingCredits: c.budget,
+            })),
+          };
+        }
+
+        const maxShares = Math.floor((totalCapital - custodyFee) / perShareBufferedCost);
+        if (maxShares <= 0) {
+          return {
+            isinCode: instrument.code,
+            isinDescription: instrument.description,
+            pricePerShare,
+            bufferedPrice,
+            totalCapital,
+            totalShares: 0,
+            grossCost: 0,
+            brokerage: 0,
+            custodyFee: 0,
+            custodyFeeMultiplier: affectedClientCount,
+            totalCost: 0,
+            residualCash: totalCapital,
+            clientAllocations: clientBudgets.map((c) => ({
+              clientId: c.clientId,
+              clientName: c.clientName,
+              lots: c.lots,
+              shares: 0,
+              spent: 0,
+              remainingCredits: c.budget,
+            })),
+          };
+        }
+
+        const totalLots = clientBudgets.reduce((sum, c) => sum + c.lots, 0);
+        const weightBase = totalLots > 0
+          ? clientBudgets.map((c) => ({ ...c, weight: c.lots / totalLots }))
+          : clientBudgets.map((c) => ({ ...c, weight: totalCapital > 0 ? c.budget / totalCapital : 0 }));
+
+        const weightedShares = weightBase.map((c) => {
+          const exact = maxShares * c.weight;
+          const floor = Math.floor(exact);
+          return {
+            ...c,
+            floor,
+            remainder: exact - floor,
+          };
+        });
+
+        let assigned = weightedShares.reduce((sum, c) => sum + c.floor, 0);
+        let remaining = maxShares - assigned;
+        weightedShares
+          .sort((a, b) => {
+            if (b.remainder !== a.remainder) return b.remainder - a.remainder;
+            return String(a.clientId).localeCompare(String(b.clientId));
+          })
+          .forEach((c) => {
+            if (remaining <= 0) return;
+            c.floor += 1;
+            remaining -= 1;
+          });
+
+        const totalShares = weightedShares.reduce((sum, c) => sum + c.floor, 0);
+        const grossCost = totalShares * bufferedPrice;
+        const brokerage = grossCost * REB_BROKERAGE_RATE;
+        const appliedCustodyFee = totalShares > 0 ? custodyFee : 0;
+        const totalCost = grossCost + brokerage + appliedCustodyFee;
+        const residualCash = Math.max(0, totalCapital - totalCost);
+
+        const perShareActualCost = bufferedPrice * (1 + REB_BROKERAGE_RATE);
+        const custodyByClient = rebDistributeMoneyByLots(appliedCustodyFee, clients);
+        const clientAllocations = weightedShares.map((c) => {
+          const spent = (c.floor * perShareActualCost) + Number(custodyByClient[c.clientId] || 0);
+          return {
+            clientId: c.clientId,
+            clientName: c.clientName,
+            lots: c.lots,
+            shares: c.floor,
+            spent: rebRoundMoney(spent),
+            remainingCredits: rebRoundMoney(Math.max(0, c.budget - spent)),
+          };
+        });
+
+        return {
+          isinCode: instrument.code,
+          isinDescription: instrument.description,
+          pricePerShare,
+          bufferedPrice,
+          totalCapital,
+          totalShares,
+          grossCost,
+          brokerage,
+          custodyFee: appliedCustodyFee,
+          custodyFeeMultiplier: affectedClientCount,
+          totalCost,
+          residualCash,
+          clientAllocations,
+        };
+      }
+
+      async function rebLoadWalletBalances(strategyId, userIds) {
+        const ids = [...new Set((userIds || []).map((id) => String(id)).filter(Boolean))];
+        if (!strategyId || !ids.length) return {};
+
+        try {
+          const { data, error } = await supabaseClient
+            .from(REB_WALLET_TABLE)
+            .select("user_id, balance")
+            .eq("strategy_id", strategyId)
+            .in("user_id", ids);
+
+          if (error) throw error;
+          return (data || []).reduce((acc, row) => {
+            const userId = String(row.user_id || "");
+            if (!userId) return acc;
+            acc[userId] = rebRoundMoney(row.balance || 0);
+            return acc;
+          }, {});
+        } catch (err) {
+          console.warn("rebLoadWalletBalances failed", err);
+          return {};
+        }
+      }
+
+      async function rebUpsertWalletBalances(strategyId, balancesByUser) {
+        const strategyKey = String(strategyId || "");
+        if (!strategyKey) return;
+        const rows = Object.entries(balancesByUser || {})
+          .map(([userId, balance]) => ({
+            strategy_id: strategyKey,
+            user_id: String(userId),
+            balance: rebRoundMoney(balance || 0),
+            updated_at: new Date().toISOString(),
+          }))
+          .filter((row) => row.user_id);
+
+        if (!rows.length) return;
+
+        const { error } = await supabaseClient
+          .from(REB_WALLET_TABLE)
+          .upsert(rows, { onConflict: "strategy_id,user_id" });
+
+        if (error) {
+          throw new Error(`${error.message || "Wallet balance update failed"}. Ensure SQL migration for ${REB_WALLET_TABLE} is applied.`);
+        }
       }
 
       /* ── State ── */
@@ -5046,6 +5406,12 @@
       let rebSelectedStep = null;
       let rebSellNetProceeds = 0;
       let rebApplyBuffer = true;
+      let rebBuySecuritiesCache = null;
+      let rebBuySecuritiesPromise = null;
+      let rebShowUnitPrice = false; // false = show total value by default
+      let rebSelectedStrategyId = null;
+      let rebWalletByClient = {};   // userId -> stored credits balance
+      let rebImpactChangeView = false;
 
       /* ── Helpers ── */
       const rebFmtZAR = n => `R\u00A0${Number(n).toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5058,6 +5424,91 @@
             name: r.name,
             lots: Math.max(1, Math.round(r.quantity / isin.unitsPerLot)),
           }));
+      }
+
+      function rebClientsForStrategy() {
+        const byClient = {};
+        Object.entries(rebRawHoldings || {}).forEach(([code, rows]) => {
+          (rows || []).forEach((r) => {
+            const qty = Number(r.quantity) || 0;
+            if (qty <= 0) return;
+            if (!byClient[r.userId]) {
+              byClient[r.userId] = {
+                id: r.userId,
+                name: r.name,
+                instruments: new Set(),
+                totalCurrentHolding: 0,
+              };
+            }
+            byClient[r.userId].instruments.add(code);
+            byClient[r.userId].totalCurrentHolding += qty;
+          });
+        });
+        return Object.values(byClient)
+          .map((c) => ({
+            id: c.id,
+            name: c.name,
+            instrumentCount: c.instruments.size,
+            totalCurrentHolding: c.totalCurrentHolding,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+
+      function rebResidualClientsForStrategy() {
+        return rebClientsForStrategy().map((client) => ({
+          id: String(client.id),
+          name: client.name,
+          // Use total strategy holding as proportional weight base for residual split.
+          lots: Math.max(1, Number(client.totalCurrentHolding) || 0),
+        }));
+      }
+
+      async function rebLoadBuySecurities() {
+        if (rebBuySecuritiesCache) return rebBuySecuritiesCache;
+        if (rebBuySecuritiesPromise) return rebBuySecuritiesPromise;
+
+        rebBuySecuritiesPromise = (async () => {
+          const selectVariants = [
+            "id, symbol, name, logo_url, last_price",
+            "id, symbol, name, logo_url",
+            "id, symbol, name",
+          ];
+
+          let rows = [];
+          for (const cols of selectVariants) {
+            const res = await supabaseClient
+              .from("securities")
+              .select(cols)
+              .order("name", { ascending: true })
+              .limit(1000);
+            if (!res.error && Array.isArray(res.data)) {
+              rows = res.data;
+              break;
+            }
+          }
+
+          rebBuySecuritiesCache = (rows || []).map((s) => {
+            const rawSymbol = String(s.symbol || "");
+            const code = rawSymbol.replace(/\.[A-Z]+$/, "") || rawSymbol || "-";
+            const currentPrice = Number(s.last_price || 0) / 100;
+            return {
+              id: String(s.id || code),
+              code,
+              fullSymbol: rawSymbol,
+              description: s.name || code,
+              currentPrice: Number.isFinite(currentPrice) ? currentPrice : 0,
+              logoUrl: s.logo_url || "",
+            };
+          });
+
+          return rebBuySecuritiesCache;
+        })();
+
+        try {
+          return await rebBuySecuritiesPromise;
+        } finally {
+          rebBuySecuritiesPromise = null;
+        }
       }
 
       /* ── Init strategy selector ── */
@@ -5080,6 +5531,8 @@
         rebSelectedIsin = null;
         rebSelectedStep = null;
         rebRawHoldings = {};
+        rebWalletByClient = {};
+        rebSelectedStrategyId = strategyId ? String(strategyId) : null;
         const strategy = (allStrategiesFullData || []).find(s => String(s.id) === String(strategyId));
         if (!strategy) { rebIsins = []; rebRenderAll(); return; }
 
@@ -5094,31 +5547,134 @@
             return { code, fullSymbol: sym, description: h.name || sym, unitsPerLot: units, currentPrice: price, weightPercent: Number(h.weight) || 0 };
           });
 
-        /* Fetch actual client holdings — query by strategy_id directly */
-        try {
-          const { data: holdRows } = await supabaseClient
-            .from("stock_holdings")
-            .select("security_id, user_id, quantity")
-            .eq("strategy_id", strategyId)
-            .eq("is_active", true)
-            .gt("quantity", 0);
-
-          if (holdRows && holdRows.length) {
-            /* Resolve security_id → ISIN code via the ISINs we already built */
-            const symbols = rebIsins.map(i => i.fullSymbol).filter(Boolean);
-            const { data: secRows } = await supabaseClient.from("securities").select("id, symbol").in("symbol", symbols);
+        /* Fetch actual client holdings from Supabase */
+        const symbols = rebIsins.map(i => i.fullSymbol).filter(Boolean);
+        if (symbols.length) {
+          try {
+            const { data: secRows } = await supabaseClient.from("securities").select("id, symbol, name, last_price").in("symbol", symbols);
             const codeBySecId = {};
             (secRows || []).forEach(s => { codeBySecId[s.id] = s.symbol.replace(/\.[A-Z]+$/, ""); });
 
-            /* Resolve user_id → display name */
-            const userIds = [...new Set(holdRows.filter(r => r.user_id).map(r => String(r.user_id)))];
-            let nameById = {};
-            if (userIds.length) {
-              const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
-              nameById = (profRows || []).reduce((acc, p) => {
-                acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
-                return acc;
-              }, {});
+            const secBySymbol = new Map();
+            (secRows || []).forEach(s => {
+              if (!s?.symbol) return;
+              secBySymbol.set(String(s.symbol), s);
+            });
+
+            rebIsins = rebIsins.map((isin) => {
+              const sec = secBySymbol.get(isin.fullSymbol);
+              const secPrice = Number(sec?.last_price || 0) / 100;
+              const resolvedPrice = isin.currentPrice > 0
+                ? isin.currentPrice
+                : (Number.isFinite(secPrice) && secPrice > 0 ? secPrice : 0);
+              return {
+                ...isin,
+                currentPrice: resolvedPrice,
+                description: isin.description || sec?.name || isin.code,
+              };
+            });
+
+            const secIds = Object.keys(codeBySecId);
+            if (secIds.length) {
+              let holdingsQuery = supabaseClient
+                .from("stock_holdings")
+                .select("security_id, user_id, quantity, strategy_id")
+                .eq("is_active", true)
+                .eq("trade_side", "BUY")
+                .in("security_id", secIds);
+
+              if (strategy?.id) {
+                holdingsQuery = holdingsQuery.eq("strategy_id", strategy.id);
+              }
+
+              const { data: holdRows } = await holdingsQuery;
+              const userIds = [...new Set((holdRows || []).filter(r => r.user_id).map(r => String(r.user_id)))];
+              rebWalletByClient = await rebLoadWalletBalances(strategy.id, userIds);
+              let nameById = {};
+              if (userIds.length) {
+                const pickFirstNonEmpty = (...values) => {
+                  for (const value of values) {
+                    if (value == null) continue;
+                    const text = String(value).trim();
+                    if (text) return text;
+                  }
+                  return "";
+                };
+                const parsePackName = (packDetails) => {
+                  try {
+                    const pack = typeof packDetails === "string" ? JSON.parse(packDetails) : packDetails;
+                    if (!pack || typeof pack !== "object") return "";
+
+                    const info = pack.info || {};
+                    const fixedInfo = pack.fixedInfo || {};
+                    const personalDetails = pack.personalDetails || pack.personal_details || {};
+
+                    const firstName = pickFirstNonEmpty(
+                      info.firstNameEn,
+                      info.firstName,
+                      info.first_name,
+                      fixedInfo.firstNameEn,
+                      fixedInfo.firstName,
+                      fixedInfo.first_name,
+                      personalDetails.firstName,
+                      personalDetails.first_name,
+                      pack.firstName,
+                      pack.first_name,
+                    );
+                    const lastName = pickFirstNonEmpty(
+                      info.lastNameEn,
+                      info.lastName,
+                      info.last_name,
+                      fixedInfo.lastNameEn,
+                      fixedInfo.lastName,
+                      fixedInfo.last_name,
+                      personalDetails.lastName,
+                      personalDetails.last_name,
+                      pack.lastName,
+                      pack.last_name,
+                    );
+
+                    return [firstName, lastName].filter(Boolean).join(" ").trim();
+                  } catch {
+                    return "";
+                  }
+                };
+
+                const { data: profRows } = await supabaseClient.from("profiles").select("id, first_name, last_name, email").in("id", userIds);
+                nameById = (profRows || []).reduce((acc, p) => {
+                  acc[String(p.id)] = [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || p.email || String(p.id);
+                  return acc;
+                }, {});
+
+                // Fallback to onboarding pack details for users whose profile name/email is not visible.
+                const missingNameUserIds = userIds.filter((id) => !nameById[id] || nameById[id] === id);
+                if (missingNameUserIds.length) {
+                  const { data: packRows } = await supabaseClient
+                    .from("user_onboarding_pack_details")
+                    .select("user_id, pack_details")
+                    .in("user_id", missingNameUserIds);
+
+                  (packRows || []).forEach((row) => {
+                    const userId = String(row?.user_id || "");
+                    if (!userId) return;
+                    const parsedName = parsePackName(row?.pack_details);
+                    if (parsedName) {
+                      nameById[userId] = parsedName;
+                    }
+                  });
+                }
+              }
+              (holdRows || []).forEach(r => {
+                if (!r.user_id || !r.security_id) return;
+                if (strategy?.id && String(r.strategy_id) !== String(strategy.id)) return;
+                const code = codeBySecId[r.security_id];
+                if (!code) return;
+                if (!rebRawHoldings[code]) rebRawHoldings[code] = [];
+                const uid = String(r.user_id);
+                const existing = rebRawHoldings[code].find(x => x.userId === uid);
+                if (existing) { existing.quantity += Number(r.quantity) || 0; }
+                else { rebRawHoldings[code].push({ userId: uid, name: nameById[uid] || uid, quantity: Number(r.quantity) || 0 }); }
+              });
             }
 
             holdRows.forEach(r => {
@@ -5151,6 +5707,10 @@
       /* ── ISINs table ── */
       function rebRenderIsinsTable() {
         const tbody = document.getElementById("rebIsinsBody");
+        const priceHeader = document.getElementById("rebPriceHeader");
+        if (priceHeader) {
+          priceHeader.textContent = rebShowUnitPrice ? "Price (R)" : "Total Price (R)";
+        }
         if (!tbody) return;
         if (!rebIsins.length) {
           tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No holdings in this strategy</td></tr>';
@@ -5161,12 +5721,14 @@
           const holders = rebRawHoldings[isin.code] || [];
           const totalQty = holders.reduce((s, r) => s + r.quantity, 0);
           const holderCount = holders.filter(r => r.quantity > 0).length;
+          const positionValue = isin.currentPrice > 0 && totalQty > 0 ? isin.currentPrice * totalQty : 0;
+          const displayPrice = rebShowUnitPrice ? isin.currentPrice : positionValue;
           return `<tr data-isin="${isin.code}" class="cursor-pointer transition-colors ${isSelected ? "bg-violet-50" : "hover:bg-slate-50"}">
             <td class="px-4 py-2.5 font-mono font-semibold ${isSelected ? "text-violet-700" : "text-slate-800"}">${isin.code}</td>
             <td class="px-4 py-2.5 text-slate-700 max-w-[120px] truncate">${isin.description}</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-600">${isin.unitsPerLot}</td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">${isin.weightPercent.toFixed(1)}%</td>
-            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${isin.currentPrice > 0 ? isin.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2 }) : "—"}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${displayPrice > 0 ? `R ${displayPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}<div class="text-[10px] font-normal text-violet-600">${rebShowUnitPrice ? "Unit" : "Total"}</div></td>
             <td class="px-4 py-2.5 text-right font-mono tabular-nums font-medium text-slate-800">${totalQty > 0 ? totalQty.toLocaleString() : "—"}<span class="text-slate-400 font-normal text-[10px] ml-1">${holderCount > 0 ? `${holderCount}c` : ""}</span></td>
           </tr>`;
         }).join("");
@@ -5248,14 +5810,170 @@
       function rebRenderImpact() {
         const tbody = document.getElementById("rebImpactBody");
         const metaEl = document.getElementById("rebImpactMeta");
+        const useResidualBtn = document.getElementById("rebUseResidualBtn");
+        const headerRow = tbody?.closest("table")?.querySelector("thead tr");
         if (!tbody) return;
 
+        const updateUseResidualButton = (visible, disabled = true) => {
+          if (!useResidualBtn) return;
+          if (visible) {
+            useResidualBtn.classList.remove("hidden");
+            useResidualBtn.disabled = !!disabled;
+            useResidualBtn.className = disabled
+              ? "w-full py-2.5 rounded-xl text-sm font-semibold text-violet-300 bg-violet-100 cursor-not-allowed"
+              : "w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 transition shadow-sm";
+          } else {
+            useResidualBtn.classList.add("hidden");
+          }
+        };
+
+        const setDefaultHeaders = () => {
+          if (!headerRow) return;
+          headerRow.innerHTML = `
+            <th class="text-left px-4 py-2">Client</th>
+            <th class="text-right px-4 py-2">Lots</th>
+            <th class="text-right px-4 py-2">Current</th>
+            <th class="text-right px-4 py-2">New</th>
+            <th class="text-right px-4 py-2">Δ</th>
+          `;
+        };
+
+        const setChangeHeaders = () => {
+          if (!headerRow) return;
+          headerRow.innerHTML = `
+            <th class="text-left px-4 py-2">Client</th>
+            <th class="text-right px-4 py-2">Weight Units</th>
+            <th class="text-right px-4 py-2">Sold Shares</th>
+            <th class="text-right px-4 py-2">Residual</th>
+            <th class="text-right px-4 py-2">Stored Wallet</th>
+            <th class="text-right px-4 py-2">Remaining to Use</th>
+          `;
+        };
+
+        if (!rebImpactChangeView) {
+          setDefaultHeaders();
+          updateUseResidualButton(false);
+        } else {
+          updateUseResidualButton(true, !(rebSelectedIsin && rebSelectedStep));
+        }
+
         const clients = rebClientsForIsin(rebSelectedIsin);
-        if (!rebSelectedIsin || !rebSelectedStep || !clients.length) {
-          tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-400">${
-            !rebSelectedIsin ? "Select an instrument" : !clients.length ? "No clients hold this instrument" : "Select a reduction step"
+        const residualClients = rebResidualClientsForStrategy();
+        if (!rebSelectedIsin) {
+          const strategyClients = rebClientsForStrategy();
+          const colSpan = rebImpactChangeView ? 6 : 5;
+          if (!strategyClients.length) {
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-8 text-center text-slate-400">${
+              rebIsins.length ? "No clients hold this strategy" : "Select a strategy"
+            }</td></tr>`;
+            if (metaEl) metaEl.textContent = rebIsins.length ? "No holders" : "Select strategy";
+            return;
+          }
+
+          if (rebImpactChangeView) {
+            setChangeHeaders();
+            const totalWallet = strategyClients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
+            if (metaEl) metaEl.textContent = `Residual view · ${strategyClients.length} clients · wallet pool ${rebFmtZAR(totalWallet)}`;
+            tbody.innerHTML = strategyClients.map(client => {
+              const wallet = Number(rebWalletByClient[String(client.id)] || 0);
+              return `
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-2.5">
+                  <p class="font-medium text-slate-800">${client.name}</p>
+                  <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+                </td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${Number(client.totalCurrentHolding || 0).toLocaleString()}</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">—</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${rebFmtZAR(wallet)}</td>
+                <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-violet-700">${rebFmtZAR(wallet)}</td>
+              </tr>`;
+            }).join("");
+            return;
+          }
+
+          if (metaEl) metaEl.textContent = `Strategy-level preview · ${strategyClients.length} clients · select instrument + step for impact`;
+          tbody.innerHTML = strategyClients.map(client => `
+          <tr class="hover:bg-slate-50">
+            <td class="px-4 py-2.5">
+              <p class="font-medium text-slate-800">${client.name}</p>
+              <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+            </td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.instrumentCount}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${client.totalCurrentHolding.toLocaleString()}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${client.totalCurrentHolding.toLocaleString()}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-400">0</td>
+          </tr>`).join("");
+          return;
+        }
+
+        if (!clients.length) {
+          tbody.innerHTML = `<tr><td colspan="${rebImpactChangeView ? 6 : 5}" class="px-4 py-8 text-center text-slate-400">${
+            "No clients hold this instrument"
           }</td></tr>`;
-          if (metaEl) metaEl.textContent = !rebSelectedIsin ? "Select instrument + step" : !clients.length ? "No holders" : "Select reduction step";
+          if (metaEl) metaEl.textContent = "No holders";
+          return;
+        }
+
+        if (!rebSelectedStep) {
+          if (metaEl) metaEl.textContent = `${rebSelectedIsin.code} · ${clients.length} clients · select reduction step`;
+          tbody.innerHTML = clients.map(client => {
+            const lots = Number(client.lots) || 0;
+            const currentHolding = lots * rebSelectedIsin.unitsPerLot;
+            return `
+          <tr class="hover:bg-slate-50">
+            <td class="px-4 py-2.5">
+              <p class="font-medium text-slate-800">${client.name}</p>
+              <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+            </td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-400">${lots}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${currentHolding.toLocaleString()}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-700">${currentHolding.toLocaleString()}</td>
+            <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-slate-400">0</td>
+          </tr>`;
+          }).join("");
+          return;
+        }
+
+        if (rebImpactChangeView) {
+          setChangeHeaders();
+          const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+          const sellExec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
+          const residualByClient = rebDistributeMoneyByLots(sellExec.netProceeds, residualClients);
+          const totalResidual = Object.values(residualByClient).reduce((sum, v) => sum + Number(v || 0), 0);
+          const totalWallet = residualClients.reduce((sum, c) => sum + Number(rebWalletByClient[String(c.id)] || 0), 0);
+          const totalAvailable = residualClients.reduce((sum, c) => {
+            const userId = String(c.id);
+            const wallet = Number(rebWalletByClient[userId] || 0);
+            const residual = Number(residualByClient[userId] || 0);
+            return sum + wallet + residual;
+          }, 0);
+          if (metaEl) {
+            metaEl.textContent = `${rebSelectedIsin.code} · total residual ${rebFmtZAR(totalResidual)} · wallet ${rebFmtZAR(totalWallet)} · available ${rebFmtZAR(totalAvailable)}`;
+          }
+
+          tbody.innerHTML = residualClients.map((client) => {
+            const userId = String(client.id);
+            const soldQty = (rebRawHoldings[rebSelectedIsin.code] || [])
+              .filter((row) => String(row.userId) === userId)
+              .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
+            const soldShares = Math.max(0, Math.round((Number(soldQty) || 0) * (Number(rebSelectedStep.reductionUnits || 0) / Math.max(1, Number(rebSelectedIsin.unitsPerLot || 1)))));
+            const residual = Number(residualByClient[userId] || 0);
+            const wallet = Number(rebWalletByClient[userId] || 0);
+            const remaining = wallet + residual;
+            return `
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-2.5">
+                <p class="font-medium text-slate-800">${client.name}</p>
+                <p class="text-[10px] text-slate-400 font-mono">${client.id}</p>
+              </td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500">${client.lots}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-red-600">−${soldShares.toLocaleString()}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-green-700">+${rebFmtZAR(residual)}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums text-slate-700">${rebFmtZAR(wallet)}</td>
+              <td class="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-violet-700">${rebFmtZAR(remaining)}</td>
+            </tr>`;
+          }).join("");
           return;
         }
 
@@ -5312,7 +6030,7 @@
         if (!rebSelectedIsin || !rebSelectedStep) return;
         const clients = rebClientsForIsin(rebSelectedIsin);
         const totalLots = clients.reduce((s, c) => s + c.lots, 0);
-        const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots);
+        const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
         const modal = document.getElementById("rebSellModal");
         const meta = document.getElementById("rebSellModalMeta");
         const body = document.getElementById("rebSellModalBody");
@@ -5326,7 +6044,7 @@
               ["Price per Share", rebFmtZAR(exec.pricePerShare), false],
               ["Gross Proceeds", rebFmtZAR(exec.grossProceeds), false],
               ["Brokerage (0.5%)", `−${rebFmtZAR(exec.brokerage)}`, true],
-              ["Off-Custody Fee", `−${rebFmtZAR(exec.offCustodyFee)}`, true],
+              [`Off-Custody Fee (x${exec.offCustodyFeeMultiplier})`, `−${rebFmtZAR(exec.offCustodyFee)}`, true],
             ].map(([label, val, isDeduct]) => `
               <div class="flex items-center justify-between text-sm">
                 <span class="text-slate-500">${label}</span>
@@ -5343,82 +6061,794 @@
       }
 
       /* ── Buy Modal ── */
-      function rebShowBuyModal(netCapital) {
+      async function rebShowBuyModal(netCapital) {
         const modal = document.getElementById("rebBuyModal");
         const metaEl = document.getElementById("rebBuyModalMeta");
         const body = document.getElementById("rebBuyModalBody");
         if (!modal || !body) return;
         if (metaEl) metaEl.textContent = `Net capital: ${rebFmtZAR(netCapital)}`;
 
-        if (!rebIsins.length) {
+        body.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">Loading instruments...</p>';
+        modal.classList.remove("hidden");
+
+        const buyUniverse = await rebLoadBuySecurities();
+        if (!buyUniverse.length) {
           body.innerHTML = '<p class="text-xs text-slate-400 text-center py-4">No instruments available</p>';
-          modal.classList.remove("hidden");
           return;
         }
 
-        let selectedBuyIsin = null;
+        let selectedBuySecurityId = null;
+        let searchTerm = "";
         let applyBuffer = true;
+        let useWalletForExtraBuy = false;
+        let extraBuySearchTerm = "";
+        let selectedExtraSecurityId = null;
 
         const render = () => {
+          const clients = rebClientsForIsin(rebSelectedIsin);
+          const residualClients = rebResidualClientsForStrategy();
+          const q = searchTerm.trim().toLowerCase();
+          const filtered = q
+            ? buyUniverse.filter((i) => {
+                const text = `${i.code} ${i.fullSymbol} ${i.description}`.toLowerCase();
+                return text.includes(q);
+              })
+            : buyUniverse;
+
+          const selectedInstrument = selectedBuySecurityId
+            ? buyUniverse.find(i => i.id === selectedBuySecurityId) || null
+            : null;
+          let selectedExec = null;
+          let selectedExecMessage = "";
+          if (selectedInstrument) {
+            if (selectedInstrument.currentPrice <= 0) {
+              selectedExecMessage = '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
+            } else {
+              selectedExec = rebComputeBuyExecution(
+                selectedInstrument.code,
+                selectedInstrument.description,
+                selectedInstrument.currentPrice,
+                netCapital,
+                clients,
+                applyBuffer,
+              );
+            }
+          }
+
+          const walletBeforeByClient = residualClients.reduce((acc, c) => {
+            const userId = String(c.id);
+            acc[userId] = rebRoundMoney(rebWalletByClient[userId] || 0);
+            return acc;
+          }, {});
+
+          const residualSplitAfterMain = selectedExec
+            ? rebDistributeMoneyByLots(selectedExec.residualCash, residualClients)
+            : {};
+
+          const walletAfterMainByClient = residualClients.reduce((acc, c) => {
+            const userId = String(c.id);
+            const mainResidual = Number(residualSplitAfterMain[userId] || 0);
+            acc[userId] = rebRoundMoney(Number(walletBeforeByClient[userId] || 0) + mainResidual);
+            return acc;
+          }, {});
+
+          const extraQ = extraBuySearchTerm.trim().toLowerCase();
+          const extraFiltered = extraQ
+            ? buyUniverse.filter((i) => {
+                const text = `${i.code} ${i.fullSymbol} ${i.description}`.toLowerCase();
+                return text.includes(extraQ);
+              })
+            : buyUniverse;
+          const selectedExtraInstrument = selectedExtraSecurityId
+            ? buyUniverse.find((i) => i.id === selectedExtraSecurityId) || null
+            : null;
+          let selectedExtraExec = null;
+          if (useWalletForExtraBuy && selectedExec && selectedExtraInstrument && selectedExtraInstrument.currentPrice > 0) {
+            selectedExtraExec = rebComputeWalletFundedBuyExecution({
+              instrument: selectedExtraInstrument,
+              clients: residualClients,
+              capitalByClient: walletAfterMainByClient,
+              applyBuffer,
+            });
+          }
+
           body.innerHTML = `
             <div class="space-y-4">
               <div>
                 <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Instrument to Buy</label>
-                <select id="rebBuyIsinSelect" class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
-                  <option value="">Select instrument…</option>
-                  ${rebIsins.map(i => `<option value="${i.code}" ${selectedBuyIsin === i.code ? "selected" : ""}>${i.code} — ${i.description}${i.currentPrice > 0 ? ` (R${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2 })})` : ""}</option>`).join("")}
+                <input
+                  id="rebBuySearch"
+                  type="text"
+                  value="${searchTerm}"
+                  placeholder="Search by name or symbol..."
+                  class="mt-1 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                />
+                <select id="rebBuyIsinSelect" class="mt-2 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
+                  <option value="">${filtered.length ? `Select instrument (${filtered.length})...` : "No instruments match your search"}</option>
+                  ${filtered.map(i => `<option value="${i.id}" ${selectedBuySecurityId === i.id ? "selected" : ""}>${i.code} · ${i.description}${i.currentPrice > 0 ? ` · R ${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : " · N/A"}</option>`).join("")}
                 </select>
+                ${selectedInstrument ? `
+                  <div class="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-8 h-8 rounded-lg border border-slate-200 bg-white overflow-hidden flex items-center justify-center flex-shrink-0">
+                        ${selectedInstrument.logoUrl ? `<img src="${selectedInstrument.logoUrl}" alt="${selectedInstrument.code}" class="w-full h-full object-contain" />` : `<span class="text-[10px] font-semibold text-slate-500">${selectedInstrument.code.slice(0, 2).toUpperCase()}</span>`}
+                      </div>
+                      <div class="min-w-0">
+                        <p class="text-xs font-semibold text-slate-900 truncate">${selectedInstrument.code} · ${selectedInstrument.description}</p>
+                        <p class="text-[10px] text-slate-400 truncate">${selectedInstrument.fullSymbol || selectedInstrument.code}</p>
+                      </div>
+                    </div>
+                    <span class="text-xs font-mono font-semibold text-slate-700">${selectedInstrument.currentPrice > 0 ? `R ${selectedInstrument.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "N/A"}</span>
+                  </div>
+                ` : ""}
               </div>
               <div class="flex items-center gap-2">
                 <input type="checkbox" id="rebBufferChk" ${applyBuffer ? "checked" : ""} class="rounded"/>
                 <label for="rebBufferChk" class="text-xs text-slate-600">Apply 8% buffer to price (conservative)</label>
               </div>
-              ${selectedBuyIsin ? (() => {
-                const isin = rebIsins.find(i => i.code === selectedBuyIsin);
-                if (!isin || isin.currentPrice <= 0) return '<p class="text-xs text-amber-600">No price available for this instrument.</p>';
-                const exec = rebComputeBuyExecution(isin.code, isin.description, isin.currentPrice, netCapital, rebClientsForIsin(rebSelectedIsin), applyBuffer);
+              <div class="rounded-xl border border-slate-200 bg-white px-3 py-3 space-y-2">
+                <label class="flex items-center gap-2 text-xs text-slate-700">
+                  <input type="checkbox" id="rebUseWalletExtraChk" ${useWalletForExtraBuy ? "checked" : ""} class="rounded"/>
+                  <span class="font-semibold">Use remaining + stored wallet credits to buy another security</span>
+                </label>
+                ${selectedExec ? `<p class="text-[11px] text-slate-500">Wallet after main buy: ${rebFmtZAR(Object.values(walletAfterMainByClient).reduce((s, v) => s + Number(v || 0), 0))}</p>` : ""}
+                ${useWalletForExtraBuy ? `
+                  <div class="space-y-2">
+                    <input
+                      id="rebExtraBuySearch"
+                      type="text"
+                      value="${extraBuySearchTerm}"
+                      placeholder="Search second security..."
+                      class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white"
+                    />
+                    <select id="rebExtraBuyIsinSelect" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-white">
+                      <option value="">${extraFiltered.length ? `Select second security (${extraFiltered.length})...` : "No instruments match your search"}</option>
+                      ${extraFiltered.map(i => `<option value="${i.id}" ${selectedExtraSecurityId === i.id ? "selected" : ""}>${i.code} · ${i.description}${i.currentPrice > 0 ? ` · R ${i.currentPrice.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : " · N/A"}</option>`).join("")}
+                    </select>
+                    ${selectedExtraExec ? `<div class="bg-slate-50 rounded-xl p-3 text-xs border border-slate-100 space-y-1.5">
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Secondary Security</span><span class="font-mono text-slate-800">${selectedExtraExec.isinCode}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Total Wallet Capital</span><span class="font-mono text-slate-800">${rebFmtZAR(selectedExtraExec.totalCapital)}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Total Shares</span><span class="font-mono text-slate-800">${selectedExtraExec.totalShares.toLocaleString()}</span></div>
+                      <div class="flex items-center justify-between"><span class="text-slate-500">Residual after Secondary Buy</span><span class="font-mono text-violet-700">${rebFmtZAR(selectedExtraExec.residualCash)}</span></div>
+                    </div>` : `<p class="text-[11px] text-slate-400">Select a second security to spend wallet credits proportionally by holder weighting.</p>`}
+                  </div>
+                ` : ""}
+              </div>
+              ${selectedBuySecurityId ? (() => {
+                if (!selectedExec) return selectedExecMessage || "";
                 return `<div class="bg-slate-50 rounded-xl p-4 space-y-2.5 text-sm border border-slate-100">
                   ${[
-                    ["Buffered Price", rebFmtZAR(exec.bufferedPrice), false],
-                    ["Buy per Lot", exec.buyPerLot.toLocaleString() + " shares", false],
-                    ["Total Shares", exec.totalShares.toLocaleString(), false],
-                    ["Gross Cost", rebFmtZAR(exec.grossCost), false],
-                    ["Brokerage", `−${rebFmtZAR(exec.brokerage)}`, true],
-                    ["Custody Fee", `−${rebFmtZAR(exec.custodyFee)}`, true],
-                    ["Total Cost", rebFmtZAR(exec.totalCost), false],
-                    ["Residual Cash", rebFmtZAR(exec.residualCash), false],
+                    ["Execution Price", rebFmtZAR(selectedExec.bufferedPrice), false],
+                    ["Buy per Lot", selectedExec.buyPerLot.toLocaleString() + " shares", false],
+                    ["Extra Shares from Residual", (selectedExec.extraSharesDistributed || 0).toLocaleString(), false],
+                    ["Total Shares", selectedExec.totalShares.toLocaleString(), false],
+                    ["Gross Cost", rebFmtZAR(selectedExec.grossCost), false],
+                    ["Brokerage", `−${rebFmtZAR(selectedExec.brokerage)}`, true],
+                    [`Custody Fee (x${selectedExec.custodyFeeMultiplier || 1})`, `−${rebFmtZAR(selectedExec.custodyFee)}`, true],
+                    ["Total Cost", rebFmtZAR(selectedExec.totalCost), false],
+                    ["Residual Cash", rebFmtZAR(selectedExec.residualCash), false],
                   ].map(([l, v, d]) => `<div class="flex items-center justify-between">
                     <span class="text-slate-500">${l}</span>
                     <span class="font-mono ${d ? "text-red-600" : "text-slate-800"}">${v}</span>
                   </div>`).join("")}
                   <div class="pt-2 border-t border-slate-100">
                     <p class="text-xs font-semibold text-slate-500 mb-2">Per-Client Allocation</p>
-                    ${exec.clientAllocations.map(ca => `<div class="flex items-center justify-between mb-1">
+                    ${selectedExec.clientAllocations.map(ca => `<div class="flex items-center justify-between mb-1">
                       <span class="text-xs text-slate-700">${ca.clientName}</span>
-                      <span class="font-mono text-xs">${ca.shares.toLocaleString()} shares · ${rebFmtZAR(ca.residualCash)} residual</span>
+                      <span class="font-mono text-xs">${ca.shares.toLocaleString()} shares${ca.extraShares > 0 ? ` (+${ca.extraShares} extra)` : ""} · ${rebFmtZAR(ca.residualCash)} residual</span>
                     </div>`).join("")}
                   </div>
                 </div>`;
               })() : ""}
             </div>`;
 
-          const isinSel = body.querySelector("#rebBuyIsinSelect");
-          if (isinSel) isinSel.addEventListener("change", () => { selectedBuyIsin = isinSel.value || null; render(); });
+          const buyCommitBtn = document.getElementById("rebBuyCommitBtn");
+          const buyResetBtn = document.getElementById("rebBuyResetBtn");
+          if (buyCommitBtn) {
+            const notEnoughCredits = !!selectedExec && Number(selectedExec.buyPerLot) === 0;
+            const hasNegativeResidual = !!selectedExec && Number(selectedExec.residualCash) < 0;
+            const missingSecondarySelection = useWalletForExtraBuy && !selectedExtraSecurityId;
+            const commitDisabled = !selectedExec || notEnoughCredits || hasNegativeResidual || missingSecondarySelection;
+            if (commitDisabled) {
+              buyCommitBtn.disabled = true;
+              buyCommitBtn.textContent = missingSecondarySelection
+                ? "Select secondary buy"
+                : hasNegativeResidual
+                  ? "Residual cannot be negative"
+                  : "Not enough credits";
+              buyCommitBtn.className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-red-50 text-red-600 border border-red-200 cursor-not-allowed";
+            } else {
+              buyCommitBtn.disabled = false;
+              buyCommitBtn.textContent = "Commit Trade Sequence";
+              buyCommitBtn.className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-white hover:bg-slate-700 transition";
+            }
+
+            if (buyResetBtn) {
+              if (notEnoughCredits) {
+                buyResetBtn.textContent = "Back";
+                buyResetBtn.dataset.mode = "back";
+              } else {
+                buyResetBtn.textContent = "Start Over";
+                buyResetBtn.dataset.mode = "start-over";
+              }
+            }
+
+            if (modal) {
+              modal._buySelection = selectedExec && selectedInstrument
+                ? {
+                    instrument: selectedInstrument,
+                    exec: selectedExec,
+                    strategyId: rebSelectedStrategyId,
+                    walletBeforeByClient,
+                    walletAfterMainByClient,
+                    extraBuy: (useWalletForExtraBuy && selectedExtraInstrument && selectedExtraExec)
+                      ? {
+                          instrument: selectedExtraInstrument,
+                          exec: selectedExtraExec,
+                        }
+                      : null,
+                  }
+                : null;
+              modal._onBack = () => {
+                selectedBuySecurityId = null;
+                searchTerm = "";
+                useWalletForExtraBuy = false;
+                extraBuySearchTerm = "";
+                selectedExtraSecurityId = null;
+                render();
+              };
+            }
+          }
+
+          const searchInput = body.querySelector("#rebBuySearch");
+          if (searchInput) searchInput.addEventListener("input", () => { searchTerm = searchInput.value || ""; render(); });
+
+          const isinSelect = body.querySelector("#rebBuyIsinSelect");
+          if (isinSelect) isinSelect.addEventListener("change", () => {
+            selectedBuySecurityId = isinSelect.value || null;
+            render();
+          });
+
           const bufChk = body.querySelector("#rebBufferChk");
           if (bufChk) bufChk.addEventListener("change", () => { applyBuffer = bufChk.checked; render(); });
+
+          const useWalletChk = body.querySelector("#rebUseWalletExtraChk");
+          if (useWalletChk) useWalletChk.addEventListener("change", () => {
+            useWalletForExtraBuy = !!useWalletChk.checked;
+            if (!useWalletForExtraBuy) {
+              extraBuySearchTerm = "";
+              selectedExtraSecurityId = null;
+            }
+            render();
+          });
+
+          const extraSearchInput = body.querySelector("#rebExtraBuySearch");
+          if (extraSearchInput) extraSearchInput.addEventListener("input", () => {
+            extraBuySearchTerm = extraSearchInput.value || "";
+            render();
+          });
+
+          const extraSelect = body.querySelector("#rebExtraBuyIsinSelect");
+          if (extraSelect) extraSelect.addEventListener("change", () => {
+            selectedExtraSecurityId = extraSelect.value || null;
+            render();
+          });
         };
 
         render();
         modal.classList.remove("hidden");
       }
 
+      const rebSymbolMatchesHolding = (holding, targets) => {
+        if (!holding) return false;
+        const raw = String(holding.symbol || holding.ticker || "").trim();
+        if (!raw) return false;
+        const normalized = normalizeSymbol(raw);
+        return targets.has(raw) || targets.has(normalized);
+      };
+
+      const rebMergeAndRevalueStrategyHoldings = async (holdings) => {
+        const mergedBySymbol = new Map();
+        (holdings || []).forEach((holding) => {
+          const rawSymbol = String(holding?.symbol || holding?.ticker || "").trim();
+          if (!rawSymbol) return;
+          const key = normalizeSymbol(rawSymbol) || rawSymbol;
+          if (!mergedBySymbol.has(key)) {
+            mergedBySymbol.set(key, {
+              symbol: rawSymbol,
+              ticker: rawSymbol,
+              name: String(holding?.name || rawSymbol),
+              shares: 0,
+            });
+          }
+          const entry = mergedBySymbol.get(key);
+          entry.shares += Math.max(0, Number(holding?.shares || holding?.quantity || 0));
+          if (!entry.name && holding?.name) entry.name = String(holding.name);
+        });
+
+        const merged = [...mergedBySymbol.values()].filter((h) => h.shares > 0);
+        if (!merged.length) return { holdings: [], minInvestment: null };
+
+        const symbols = merged.map((h) => h.symbol).filter(Boolean);
+        const priceBySymbol = new Map();
+        const nameBySymbol = new Map();
+        if (symbols.length) {
+          const { data: secRows, error: secErr } = await supabaseClient
+            .from("securities")
+            .select("symbol, name, last_price")
+            .in("symbol", symbols);
+          if (secErr) throw new Error(secErr.message || "Failed to load latest security prices.");
+          (secRows || []).forEach((row) => {
+            const symbol = String(row.symbol || "");
+            const norm = normalizeSymbol(symbol);
+            const price = Number(row.last_price || 0) / 100;
+            if (symbol) {
+              priceBySymbol.set(symbol, Number.isFinite(price) ? price : 0);
+              if (row.name) nameBySymbol.set(symbol, String(row.name));
+            }
+            if (norm) {
+              if (!priceBySymbol.has(norm)) priceBySymbol.set(norm, Number.isFinite(price) ? price : 0);
+              if (row.name && !nameBySymbol.has(norm)) nameBySymbol.set(norm, String(row.name));
+            }
+          });
+        }
+
+        const valued = merged.map((holding) => {
+          const norm = normalizeSymbol(holding.symbol);
+          const shares = Math.max(0, Number(holding.shares || 0));
+          const price = priceBySymbol.get(holding.symbol) ?? priceBySymbol.get(norm) ?? 0;
+          const marketValue = shares * (Number.isFinite(price) ? price : 0);
+          const fallbackBasis = shares;
+          return {
+            symbol: holding.symbol,
+            ticker: holding.symbol,
+            name: nameBySymbol.get(holding.symbol) || nameBySymbol.get(norm) || holding.name || holding.symbol,
+            shares,
+            quantity: shares,
+            marketValue,
+            basis: marketValue > 0 ? marketValue : fallbackBasis,
+          };
+        });
+
+        const totalMarketValue = valued.reduce((sum, h) => sum + h.marketValue, 0);
+        const totalBasis = valued.reduce((sum, h) => sum + h.basis, 0);
+
+        const holdingsPayload = valued.map((holding) => ({
+          symbol: holding.symbol,
+          ticker: holding.ticker,
+          name: holding.name,
+          shares: holding.shares,
+          quantity: holding.quantity,
+          weight: totalBasis > 0 ? Number(((holding.basis / totalBasis) * 100).toFixed(2)) : 0,
+        }));
+
+        return {
+          holdings: holdingsPayload,
+          minInvestment: totalMarketValue > 0 ? Math.round(totalMarketValue) : null,
+        };
+      };
+
+      async function rebReplaceStrategyHoldingAfterBuy({
+        strategyId,
+        soldIsin,
+        sellStep,
+        buySelection,
+        buyExec,
+      }) {
+        if (!strategyId || !soldIsin?.fullSymbol || !buySelection?.instrument || !sellStep) return;
+
+        const strategy = (allStrategiesFullData || []).find((s) => String(s.id) === String(strategyId));
+        if (!strategy || !Array.isArray(strategy.holdings) || !strategy.holdings.length) return;
+
+        const buyFullSymbol = String(buySelection.instrument.fullSymbol || "").trim();
+        if (!buyFullSymbol) return;
+
+        const soldTargets = new Set([
+          String(soldIsin.fullSymbol || "").trim(),
+          normalizeSymbol(String(soldIsin.fullSymbol || "").trim()),
+          String(soldIsin.code || "").trim(),
+          normalizeSymbol(String(soldIsin.code || "").trim()),
+        ].filter(Boolean));
+
+        const buyTargets = new Set([
+          buyFullSymbol,
+          normalizeSymbol(buyFullSymbol),
+          String(buySelection.instrument.code || "").trim(),
+          normalizeSymbol(String(buySelection.instrument.code || "").trim()),
+        ].filter(Boolean));
+
+        const nextHoldings = (strategy.holdings || []).map((h) => ({ ...h }));
+        let soldIndex = -1;
+        let buyIndex = -1;
+        nextHoldings.forEach((holding, idx) => {
+          if (soldIndex < 0 && rebSymbolMatchesHolding(holding, soldTargets)) soldIndex = idx;
+          if (buyIndex < 0 && rebSymbolMatchesHolding(holding, buyTargets)) buyIndex = idx;
+        });
+
+        if (soldIndex < 0) return;
+
+        const buyShares = Math.max(1, Number(buyExec?.buyPerLot || 0));
+        const nextSoldShares = Math.max(0, Number(sellStep?.newUnitsPerLot || 0));
+        const isFullExit = nextSoldShares <= 0 || Number(sellStep?.reductionPercent || 0) >= 100;
+
+        if (isFullExit) {
+          nextHoldings.splice(soldIndex, 1);
+          if (buyIndex > soldIndex) buyIndex -= 1;
+          if (buyIndex === soldIndex) buyIndex = -1;
+        } else {
+          const soldHolding = nextHoldings[soldIndex] || {};
+          nextHoldings[soldIndex] = {
+            ...soldHolding,
+            symbol: soldHolding.symbol || soldIsin.fullSymbol,
+            ticker: soldHolding.ticker || soldHolding.symbol || soldIsin.fullSymbol,
+            name: soldHolding.name || soldIsin.description || soldIsin.code || soldIsin.fullSymbol,
+            shares: nextSoldShares,
+            quantity: nextSoldShares,
+          };
+        }
+
+        if (buyIndex >= 0) {
+          const existingBuy = nextHoldings[buyIndex] || {};
+          const currentBuyShares = Math.max(0, Number(existingBuy.shares || existingBuy.quantity || 0));
+          const updatedBuyShares = currentBuyShares + buyShares;
+          nextHoldings[buyIndex] = {
+            ...existingBuy,
+            symbol: existingBuy.symbol || buyFullSymbol,
+            ticker: existingBuy.ticker || existingBuy.symbol || buyFullSymbol,
+            name: existingBuy.name || buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
+            shares: updatedBuyShares,
+            quantity: updatedBuyShares,
+          };
+        } else {
+          nextHoldings.push({
+            symbol: buyFullSymbol,
+            ticker: buyFullSymbol,
+            name: buySelection.instrument.description || buySelection.instrument.code || buyFullSymbol,
+            shares: buyShares,
+            quantity: buyShares,
+          });
+        }
+
+        const { holdings, minInvestment } = await rebMergeAndRevalueStrategyHoldings(nextHoldings);
+        const { error: strategyUpdateErr } = await supabaseClient
+          .from("strategies")
+          .update({
+            holdings: holdings.length ? holdings : null,
+            min_investment: minInvestment,
+          })
+          .eq("id", strategyId);
+
+        if (strategyUpdateErr) {
+          throw new Error(strategyUpdateErr.message || "Failed to update strategy holdings.");
+        }
+
+        allStrategiesFullData = (allStrategiesFullData || []).map((item) => {
+          if (String(item.id) !== String(strategyId)) return item;
+          return {
+            ...item,
+            holdings,
+            min_investment: minInvestment,
+          };
+        });
+        allStrategiesData = (allStrategiesData || []).map((item) => {
+          if (String(item.id) !== String(strategyId)) return item;
+          return {
+            ...item,
+            holdings,
+            min_investment: minInvestment,
+          };
+        });
+      }
+
+      async function rebPersistCommittedTradeSequence() {
+        const buyModal = document.getElementById("rebBuyModal");
+        const buySelection = buyModal?._buySelection;
+        if (!buySelection?.exec || !buySelection?.instrument) {
+          throw new Error("Please select an instrument to buy first.");
+        }
+        if (!rebSelectedIsin || !rebSelectedStep) {
+          throw new Error("Missing sell selection. Please restart the sequence.");
+        }
+        const strategyId = buySelection.strategyId || rebSelectedStrategyId;
+        if (!strategyId) {
+          throw new Error("Strategy context missing. Please reselect strategy.");
+        }
+
+        const clients = rebClientsForIsin(rebSelectedIsin);
+        if (!clients.length) {
+          throw new Error("No client holdings available for this instrument.");
+        }
+
+        const buyExec = buySelection.exec;
+        if (Number(buyExec.buyPerLot) <= 0) {
+          throw new Error("Not enough credits for purchase.");
+        }
+        if (Number(buyExec.residualCash) < 0) {
+          throw new Error("Residual cannot be negative. Reduce buy quantity before committing.");
+        }
+        const extraBuySelection = buySelection.extraBuy || null;
+        const extraBuyExec = extraBuySelection?.exec || null;
+
+        const symbolsToResolve = [
+          rebSelectedIsin.fullSymbol,
+          buySelection.instrument.fullSymbol,
+          extraBuySelection?.instrument?.fullSymbol,
+        ].filter(Boolean);
+        const { data: secRows, error: secErr } = await supabaseClient
+          .from("securities")
+          .select("id, symbol")
+          .in("symbol", symbolsToResolve);
+        if (secErr) throw new Error(secErr.message || "Failed to resolve security IDs.");
+
+        const secIdBySymbol = (secRows || []).reduce((acc, row) => {
+          acc[String(row.symbol)] = String(row.id);
+          return acc;
+        }, {});
+
+        const sellSecurityId = secIdBySymbol[rebSelectedIsin.fullSymbol] || null;
+        const buySecurityId = String(buySelection.instrument.id || secIdBySymbol[buySelection.instrument.fullSymbol] || "");
+        const extraBuySecurityId = extraBuySelection
+          ? String(extraBuySelection.instrument.id || secIdBySymbol[extraBuySelection.instrument.fullSymbol] || "")
+          : "";
+        if (!sellSecurityId || !buySecurityId) {
+          throw new Error("Could not resolve sell/buy security IDs.");
+        }
+        if (extraBuySelection && !extraBuySecurityId) {
+          throw new Error("Could not resolve secondary buy security ID.");
+        }
+        if (extraBuySelection && String(extraBuySecurityId) === String(buySecurityId)) {
+          throw new Error("Secondary buy security must be different from the primary buy security.");
+        }
+
+        await rebReplaceStrategyHoldingAfterBuy({
+          strategyId,
+          soldIsin: rebSelectedIsin,
+          sellStep: rebSelectedStep,
+          buySelection,
+          buyExec,
+        });
+
+        const rebalanceBatchId = (window.crypto && typeof window.crypto.randomUUID === "function")
+          ? window.crypto.randomUUID()
+          : `reb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const strategyRef = (allStrategiesFullData || []).find((s) => String(s.id) === String(strategyId));
+        const strategyNameSnapshot = strategyRef?.short_name || strategyRef?.name || "";
+
+        const userIds = [...new Set([
+          ...clients.map((c) => String(c.id)),
+          ...(buyExec.clientAllocations || []).map((a) => String(a.clientId)),
+          ...(extraBuyExec?.clientAllocations || []).map((a) => String(a.clientId)),
+        ])];
+        const securityIds = [...new Set([
+          sellSecurityId,
+          buySecurityId,
+          ...(extraBuySecurityId ? [extraBuySecurityId] : []),
+        ])];
+
+        const { data: existingRows, error: existingErr } = await supabaseClient
+          .from("stock_holdings")
+          .select("id, user_id, security_id, quantity, trade_side, is_active")
+          .eq("strategy_id", strategyId)
+          .eq("is_active", true)
+          .eq("trade_side", "BUY")
+          .in("user_id", userIds)
+          .in("security_id", securityIds);
+        if (existingErr) throw new Error(existingErr.message || "Failed to load existing holdings.");
+
+        const nowIso = new Date().toISOString();
+        const activeSellRows = (existingRows || []).filter((row) => {
+          return String(row.security_id) === String(sellSecurityId)
+            && Number(row.quantity || 0) > 0;
+        });
+
+        if (!activeSellRows.length) {
+          throw new Error("No active position found for selected sell instrument.");
+        }
+
+        // Persist SELL order history rows first for broker/audit visibility.
+        const sellEventRows = activeSellRows.map((row) => ({
+          user_id: row.user_id,
+          security_id: sellSecurityId,
+          quantity: Math.abs(Number(row.quantity || 0)),
+          strategy_id: strategyId,
+          updated_at: nowIso,
+          trade_side: "SELL",
+          is_active: false,
+          closed_reason: "REBALANCE_EVENT_SELL",
+          closed_at: nowIso,
+          rebalance_batch_id: rebalanceBatchId,
+          strategy_name_snapshot: strategyNameSnapshot,
+        }));
+        if (sellEventRows.length) {
+          const { error: sellEventErr } = await supabaseClient
+            .from("stock_holdings")
+            .insert(sellEventRows);
+          if (sellEventErr) throw new Error(sellEventErr.message || "Failed to insert sell order events.");
+        }
+
+        // Close old held position rows so holdings bucket can fully replace instrument.
+        const soldPositionIds = activeSellRows.map((row) => row.id).filter(Boolean);
+        if (soldPositionIds.length) {
+          const { error: closeErr } = await supabaseClient
+            .from("stock_holdings")
+            .update({
+              is_active: false,
+              closed_reason: "POSITION_REPLACED",
+              closed_at: nowIso,
+              updated_at: nowIso,
+              rebalance_batch_id: rebalanceBatchId,
+            })
+            .in("id", soldPositionIds);
+          if (closeErr) throw new Error(closeErr.message || "Failed to close replaced positions.");
+        }
+
+        // Persist BUY order history rows for orderbook audit trail.
+        const buyEventRows = (buyExec.clientAllocations || [])
+          .map((alloc) => ({
+            user_id: String(alloc.clientId),
+            security_id: buySecurityId,
+            quantity: Number(alloc.shares || 0),
+            strategy_id: strategyId,
+            updated_at: nowIso,
+            trade_side: "BUY",
+            is_active: false,
+            closed_reason: "REBALANCE_EVENT_BUY",
+            closed_at: nowIso,
+            rebalance_batch_id: rebalanceBatchId,
+            strategy_name_snapshot: strategyNameSnapshot,
+          }))
+          .filter((row) => row.quantity > 0);
+        if (buyEventRows.length) {
+          const { error: buyEventErr } = await supabaseClient
+            .from("stock_holdings")
+            .insert(buyEventRows);
+          if (buyEventErr) throw new Error(buyEventErr.message || "Failed to insert buy order events.");
+        }
+
+        if (extraBuyExec) {
+          const extraBuyEventRows = (extraBuyExec.clientAllocations || [])
+            .map((alloc) => ({
+              user_id: String(alloc.clientId),
+              security_id: extraBuySecurityId,
+              quantity: Number(alloc.shares || 0),
+              strategy_id: strategyId,
+              updated_at: nowIso,
+              trade_side: "BUY",
+              is_active: false,
+              closed_reason: "REBALANCE_EVENT_BUY_WALLET",
+              closed_at: nowIso,
+              rebalance_batch_id: rebalanceBatchId,
+              strategy_name_snapshot: strategyNameSnapshot,
+            }))
+            .filter((row) => row.quantity > 0);
+          if (extraBuyEventRows.length) {
+            const { error: extraBuyEventErr } = await supabaseClient
+              .from("stock_holdings")
+              .insert(extraBuyEventRows);
+            if (extraBuyEventErr) throw new Error(extraBuyEventErr.message || "Failed to insert secondary buy order events.");
+          }
+        }
+
+        const applyActiveBuyAllocations = async (securityId, allocations) => {
+          const activeBuyRows = (existingRows || []).filter((row) => {
+            return String(row.security_id) === String(securityId)
+              && Number(row.quantity || 0) >= 0;
+          });
+          const activeBuyByUserId = activeBuyRows.reduce((acc, row) => {
+            const userId = String(row.user_id || "");
+            if (!userId || acc[userId]) return acc;
+            acc[userId] = row;
+            return acc;
+          }, {});
+
+          for (const alloc of (allocations || [])) {
+            const userId = String(alloc.clientId || "");
+            const buyQty = Number(alloc.shares || 0);
+            if (!userId || buyQty <= 0) continue;
+
+            const existingBuy = activeBuyByUserId[userId];
+            if (existingBuy) {
+              const nextQty = Math.max(0, Number(existingBuy.quantity || 0) + buyQty);
+              const { error: updateErr } = await supabaseClient
+                .from("stock_holdings")
+                .update({
+                  quantity: nextQty,
+                  updated_at: nowIso,
+                  trade_side: "BUY",
+                  is_active: true,
+                  strategy_name_snapshot: strategyNameSnapshot,
+                })
+                .eq("id", existingBuy.id);
+              if (updateErr) throw new Error(updateErr.message || "Failed to update active buy bucket.");
+            } else {
+              const { error: insertErr } = await supabaseClient
+                .from("stock_holdings")
+                .insert({
+                  user_id: userId,
+                  security_id: securityId,
+                  quantity: buyQty,
+                  strategy_id: strategyId,
+                  updated_at: nowIso,
+                  trade_side: "BUY",
+                  is_active: true,
+                  rebalance_batch_id: rebalanceBatchId,
+                  strategy_name_snapshot: strategyNameSnapshot,
+                });
+              if (insertErr) throw new Error(insertErr.message || "Failed to insert active buy bucket row.");
+            }
+          }
+        };
+
+        await applyActiveBuyAllocations(buySecurityId, buyExec.clientAllocations || []);
+        if (extraBuyExec) {
+          await applyActiveBuyAllocations(extraBuySecurityId, extraBuyExec.clientAllocations || []);
+        }
+
+        const walletBeforeByClient = buySelection.walletBeforeByClient || {};
+        const walletAfterMainByClient = buySelection.walletAfterMainByClient || {};
+        const finalWalletByClient = {};
+        if (extraBuyExec) {
+          (extraBuyExec.clientAllocations || []).forEach((alloc) => {
+            const userId = String(alloc.clientId || "");
+            if (!userId) return;
+            finalWalletByClient[userId] = rebRoundMoney(alloc.remainingCredits || 0);
+          });
+        }
+
+        const walletParticipantIds = [...new Set([
+          ...Object.keys(walletBeforeByClient || {}),
+          ...Object.keys(walletAfterMainByClient || {}),
+          ...clients.map((client) => String(client.id || "")),
+        ])];
+        walletParticipantIds.forEach((userId) => {
+          if (!userId) return;
+          if (finalWalletByClient[userId] == null) {
+            finalWalletByClient[userId] = rebRoundMoney(
+              walletAfterMainByClient[userId] ?? walletBeforeByClient[userId] ?? 0,
+            );
+          }
+        });
+        await rebUpsertWalletBalances(strategyId, finalWalletByClient);
+        rebWalletByClient = { ...rebWalletByClient, ...finalWalletByClient };
+
+        rebSelectedStrategyId = String(strategyId);
+        await rebLoadStrategy(strategyId);
+      }
+
       /* ── Wire up rebalancing event listeners (deferred) ── */
       window.addEventListener("DOMContentLoaded", () => {
+        const rebPriceHeader = document.getElementById("rebPriceHeader");
+        if (rebPriceHeader) {
+          rebPriceHeader.addEventListener("click", () => {
+            rebShowUnitPrice = !rebShowUnitPrice;
+            rebRenderIsinsTable();
+          });
+        }
+
+        const rebImpactToggle = document.getElementById("rebImpactChangeToggle");
+        if (rebImpactToggle) {
+          rebImpactToggle.addEventListener("change", () => {
+            rebImpactChangeView = !!rebImpactToggle.checked;
+            rebRenderImpact();
+          });
+        }
+
+        const rebUseResidualBtn = document.getElementById("rebUseResidualBtn");
+        if (rebUseResidualBtn) {
+          rebUseResidualBtn.addEventListener("click", () => {
+            if (!rebSelectedIsin || !rebSelectedStep) return;
+            const clients = rebClientsForIsin(rebSelectedIsin);
+            const totalLots = clients.reduce((sum, c) => sum + (Number(c.lots) || 0), 0);
+            const exec = rebComputeSellExecution(rebSelectedIsin, rebSelectedStep.reductionUnits, totalLots, clients.length);
+            rebShowBuyModal(exec.netProceeds);
+          });
+        }
+
         /* Strategy selector */
         const stratSel = document.getElementById("rebStrategySelect");
         if (stratSel) stratSel.addEventListener("change", () => {
           if (stratSel.value) rebLoadStrategy(stratSel.value);
-          else { rebIsins = []; rebSelectedIsin = null; rebSelectedStep = null; rebRenderAll(); }
+          else { rebSelectedStrategyId = null; rebIsins = []; rebSelectedIsin = null; rebSelectedStep = null; rebRenderAll(); }
         });
 
         /* Commit button → sell modal */
@@ -5451,21 +6881,39 @@
         if (buyClose) buyClose.addEventListener("click", closeBuy);
         if (buyOverlay) buyOverlay.addEventListener("click", closeBuy);
         if (buyReset) buyReset.addEventListener("click", () => {
+          if (buyReset.dataset.mode === "back" && buyModal && typeof buyModal._onBack === "function") {
+            buyModal._onBack();
+            return;
+          }
           closeBuy();
           rebSelectedStep = null;
           rebRenderAll();
         });
-        if (buyCommit) buyCommit.addEventListener("click", () => {
-          closeBuy();
-          /* success toast */
-          const t = document.createElement("div");
-          t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#1e293b;color:#f8fafc;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
-          t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Trade sequence committed`;
-          document.body.appendChild(t);
-          setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 2800);
-          rebSelectedIsin = null;
-          rebSelectedStep = null;
-          rebRenderAll();
+        if (buyCommit) buyCommit.addEventListener("click", async () => {
+          const prevLabel = buyCommit.textContent;
+          buyCommit.disabled = true;
+          buyCommit.textContent = "Processing...";
+          try {
+            await rebPersistCommittedTradeSequence();
+            closeBuy();
+            const t = document.createElement("div");
+            t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#1e293b;color:#f8fafc;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
+            t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Trade sequence committed`;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 2800);
+            rebSelectedIsin = null;
+            rebSelectedStep = null;
+            rebRenderAll();
+          } catch (err) {
+            const t = document.createElement("div");
+            t.style.cssText = "position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:10px;background:#7f1d1d;color:#fee2e2;font-size:13px;font-weight:600;padding:12px 20px;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.22);pointer-events:none;white-space:nowrap;animation:toast-in 0.22s ease forwards";
+            t.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg> ${String(err?.message || "Trade commit failed")}`;
+            document.body.appendChild(t);
+            setTimeout(() => { t.style.animation = "toast-out 0.22s ease forwards"; setTimeout(() => t.remove(), 230); }, 3600);
+          } finally {
+            buyCommit.disabled = false;
+            buyCommit.textContent = prevLabel || "Commit Trade Sequence";
+          }
         });
       });
     </script>
