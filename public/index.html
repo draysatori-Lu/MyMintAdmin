@@ -1900,6 +1900,10 @@
       color: #ef4444;
     }
 
+    .holding-change.neutral {
+      color: #6b7280;
+    }
+
     .strategy-group-card {
       cursor: pointer;
       transition: box-shadow 0.2s ease, border-color 0.2s ease;
@@ -5386,11 +5390,13 @@
       if (!currentPrice && row.market_value) liveMarketValue = Number(row.market_value);
 
       const isNegative = bottomValue < liveMarketValue;
-      const showPlus = bottomValue > liveMarketValue;
-      const pnlColorClass = isNegative ? 'holding-change negative' : 'holding-change';
+      const isPositive = bottomValue > liveMarketValue;
+      const pnlColorClass = isNegative
+        ? 'holding-change negative'
+        : (isPositive ? 'holding-change' : 'holding-change neutral');
       const marketValue = liveMarketValue ? `R ${formatNumber(liveMarketValue, 2)}` : 'R -';
-      const pnl = bottomValue
-        ? `${showPlus ? '+' : ''}R ${formatNumber(Math.abs(bottomValue), 2)}`
+      const pnl = Number.isFinite(bottomValue)
+        ? `${isPositive ? '+' : (isNegative ? '-' : '')}R ${formatNumber(Math.abs(bottomValue), 2)}`
         : '-';
       const priceStr = currentPrice ? `R ${formatNumber(currentPrice, 2)}/share` : '';
       const status = row.status || row.Status || 'Stock';
@@ -5438,10 +5444,14 @@
       });
 
       const isNegative = totalBottomValue < totalValue;
-      const showPlus = totalBottomValue > totalValue;
-      const pnlColorClass = isNegative ? 'holding-change negative' : 'holding-change';
+      const isPositive = totalBottomValue > totalValue;
+      const pnlColorClass = isNegative
+        ? 'holding-change negative'
+        : (isPositive ? 'holding-change' : 'holding-change neutral');
       const valueStr = totalValue ? `R ${formatNumber(totalValue, 2)}` : 'R -';
-      const pnlStr = totalBottomValue ? `${showPlus ? '+' : ''}R ${formatNumber(Math.abs(totalBottomValue), 2)}` : '-';
+      const pnlStr = Number.isFinite(totalBottomValue)
+        ? `${isPositive ? '+' : (isNegative ? '-' : '')}R ${formatNumber(Math.abs(totalBottomValue), 2)}`
+        : '-';
       const holdingCount = holdings.length;
       const safeGroupId = escapeHtml(groupId);
 
